@@ -8,8 +8,20 @@ import { EmptyState } from '../../components/ui/EmptyState';
 import GoalCard from './GoalCard';
 import VisionBoard from './VisionBoard';
 import WeeklyReview from './WeeklyReview';
-import { uuid } from '../../lib/utils';
+import { uuid, today } from '../../lib/utils';
 import { localGet } from '../../lib/storage';
+
+function addDays(n) {
+  const d = new Date(today() + 'T12:00:00');
+  d.setDate(d.getDate() + n);
+  return d.toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
+}
+
+const STARTER_TEMPLATES = [
+  { title: 'Run a 5K', category: 'Health', description: 'Build up to running 5 kilometers without stopping.', days: 30 },
+  { title: 'Drink 8 cups of water daily for 30 days', category: 'Health', description: 'Stay hydrated every day for a full month.', days: 30 },
+  { title: 'Save $500', category: 'Financial', description: 'Put aside money consistently to reach a $500 savings milestone.', days: 60 },
+];
 
 const ALL_CATEGORIES = ['Health','Financial','Personal','Career','Education','Other'];
 const TABS = ['Goals','Vision Board','Weekly Review'];
@@ -49,7 +61,7 @@ export default function GoalsModule() {
       <div className="flex gap-1 overflow-x-auto pb-1">
         {TABS.map(t => (
           <button key={t} onClick={() => setTab(t)}
-            className={`px-3 py-1.5 rounded-lg text-sm font-medium whitespace-nowrap transition-colors ${tab===t?'bg-indigo-600 text-white':'text-gray-400 hover:text-white hover:bg-gray-800'}`}>
+            className={`px-3 py-1.5 rounded-lg text-sm font-medium whitespace-nowrap transition-colors ${tab===t?'bg-amber-600 text-white':'text-gray-400 hover:text-white hover:bg-gray-800'}`}>
             {t}
           </button>
         ))}
@@ -64,13 +76,34 @@ export default function GoalsModule() {
                   className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-colors ${filter===s?'bg-gray-700 text-white':'text-gray-500 hover:text-white'}`}>{s}</button>
               ))}
             </div>
-            {visible.length===0
-              ? <EmptyState icon="🎯" message={filter==='All'?"No goals yet — create your first one above":`No ${filter} goals`}
-                  action={<Button size="sm" onClick={()=>setOpen(true)}>Create Goal</Button>}/>
-              : visible.map(goal=>(
-                  <GoalCard key={goal.id} goal={goal} onUpdate={updateGoal} onDelete={()=>deleteGoal(goal.id)}/>
-                ))
-            }
+            {visible.length === 0 && filter === 'All' && goals.length === 0 ? (
+              <div className="space-y-3">
+                <p className="text-xs text-gray-500 text-center">No goals yet. Try one of these to get started:</p>
+                {STARTER_TEMPLATES.map(tpl => (
+                  <div key={tpl.title} className="flex items-center justify-between p-3 bg-gray-900 border border-amber-500/20 rounded-xl gap-3">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-white truncate">{tpl.title}</p>
+                      <p className="text-xs text-gray-500">{tpl.category} · {tpl.days} days</p>
+                    </div>
+                    <button
+                      onClick={() => {
+                        setGoals(prev => [{ ...EMPTY, id: uuid(), title: tpl.title, category: tpl.category, description: tpl.description, targetDate: addDays(tpl.days) }, ...prev]);
+                      }}
+                      className="flex-shrink-0 px-2.5 py-1 bg-amber-600 hover:bg-amber-500 text-white text-xs font-medium rounded-lg transition-colors">
+                      + Add
+                    </button>
+                  </div>
+                ))}
+                <div className="text-center">
+                  <Button size="sm" onClick={() => setOpen(true)}>Create Custom Goal</Button>
+                </div>
+              </div>
+            ) : visible.length === 0 ? (
+              <EmptyState icon="🎯" message={`No ${filter} goals`}
+                action={<Button size="sm" onClick={()=>setOpen(true)}>Create Goal</Button>}/>
+            ) : visible.map(goal=>(
+              <GoalCard key={goal.id} goal={goal} onUpdate={updateGoal} onDelete={()=>deleteGoal(goal.id)}/>
+            ))}
           </div>
         )}
         {tab==='Vision Board'  && <VisionBoard/>}

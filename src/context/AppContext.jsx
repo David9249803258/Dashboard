@@ -39,12 +39,22 @@ export function AppProvider({ children }) {
     document.documentElement.classList.toggle('dark', state.theme === 'dark');
   }, [state]);
 
-  // Record login streak
+  // Activity streak — only counts days where data was actually logged
   useEffect(() => {
-    const dates = localGet('login_dates') || [];
-    if (!dates.includes(today())) {
-      const next = [...dates, today()];
-      localSet('login_dates', next);
+    const t = today();
+    const key = 'activity_dates';
+    const dates = localGet(key) || [];
+    const water = localGet('health_water') || {};
+    const hasActivity =
+      (water[t] || 0) > 0 ||
+      (localGet('health_workouts') || []).some(w => w.date === t) ||
+      (localGet('health_cardio') || []).some(c => c.date === t) ||
+      (localGet('nutrition_logs') || []).some(n => n.date === t) ||
+      Object.keys((localGet('productivity_habit_logs') || {})[t] || {}).length > 0 ||
+      (localGet('health_sleep') || []).some(s => s.date === t);
+    if (hasActivity && !dates.includes(t)) {
+      const next = [...dates, t];
+      localSet(key, next);
       dispatch({ type: 'SET', key: 'loginDates', value: next });
     } else {
       dispatch({ type: 'SET', key: 'loginDates', value: dates });

@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { Trophy, Plus, Trash2, Search, Timer } from 'lucide-react';
+import { Trophy, Plus, Trash2, Search, Timer, ChevronDown, ChevronUp } from 'lucide-react';
 import { useModuleData } from '../../lib/useModuleData';
 import { Card, CardTitle } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
@@ -11,8 +11,35 @@ import { today, uuid } from '../../lib/utils';
 import { CHART_COLORS, WEEKDAYS } from '../../lib/constants';
 import { EXERCISE_LIBRARY, MUSCLE_GROUPS, CARDIO_TYPES } from './exerciseLibrary';
 
-const LIFT_EMPTY   = { date: today(), exercise: '', sets: '', reps: '', weight: '' };
-const CARDIO_EMPTY = { date: today(), activity: 'Run', duration: '', distance: '', calories: '' };
+// ── Today's Sets panel ────────────────────────────────────────────────────────
+function TodaysSets({ workouts, unit, onDelete }) {
+  const [open, setOpen] = useState(true);
+  const t = today();
+  const todayWOs = workouts.filter(w => w.date === t).slice(0, 20);
+  if (!todayWOs.length) return null;
+  return (
+    <Card>
+      <button onClick={() => setOpen(v => !v)} className="flex items-center justify-between w-full">
+        <CardTitle className="mb-0">Today's Sets ({todayWOs.length})</CardTitle>
+        {open ? <ChevronUp size={14} className="text-gray-500"/> : <ChevronDown size={14} className="text-gray-500"/>}
+      </button>
+      {open && (
+        <div className="mt-3 space-y-1.5">
+          {todayWOs.map(w => (
+            <div key={w.id} className="flex items-center justify-between text-sm py-1 border-b border-gray-800/60 last:border-0">
+              <span className="font-medium text-white truncate max-w-[40%]">{w.exercise}</span>
+              <span className="text-gray-400">{w.sets}×{w.reps} @ {w.weight}{unit}</span>
+              <button onClick={() => onDelete(w.id)} className="p-1 text-gray-600 hover:text-red-400"><Trash2 size={11}/></button>
+            </div>
+          ))}
+        </div>
+      )}
+    </Card>
+  );
+}
+
+const liftEmpty   = () => ({ date: today(), exercise: '', sets: '', reps: '', weight: '' });
+const cardioEmpty = () => ({ date: today(), activity: 'Run', duration: '', distance: '', calories: '' });
 const ROUTINE_EMPTY = { name: '' };
 
 // ── Exercise search dropdown ──────────────────────────────────────────────────
@@ -135,8 +162,8 @@ export default function GymTracker({ unit }) {
   const [workouts,    setWorkouts]    = useModuleData('health_workouts', []);
   const [cardioLogs,  setCardioLogs]  = useModuleData('health_cardio',   []);
   const [customExs,   setCustomExs]   = useModuleData('health_custom_exercises', []);
-  const [liftForm,    setLiftForm]    = useState(LIFT_EMPTY);
-  const [cardioForm,  setCardioForm]  = useState(CARDIO_EMPTY);
+  const [liftForm,    setLiftForm]    = useState(liftEmpty);
+  const [cardioForm,  setCardioForm]  = useState(cardioEmpty);
   const [liftErrors,  setLiftErrors]  = useState({});
   const [subTab,      setSubTab]      = useState('Strength');
 
@@ -155,13 +182,13 @@ export default function GymTracker({ unit }) {
     const inLib = EXERCISE_LIBRARY.some(e=>e.name.toLowerCase()===liftForm.exercise.toLowerCase());
     if (!inLib && !customExs.includes(liftForm.exercise)) setCustomExs(p=>[...p,liftForm.exercise]);
     setWorkouts(prev => [entry, ...prev]);
-    setLiftForm(LIFT_EMPTY);
+    setLiftForm(liftEmpty());
   }
 
   function addCardio() {
     if (!cardioForm.duration || +cardioForm.duration <= 0) return;
     setCardioLogs(prev=>[{ ...cardioForm, id:uuid(), duration:+cardioForm.duration, distance:+cardioForm.distance||0, calories:+cardioForm.calories||0 }, ...prev]);
-    setCardioForm(CARDIO_EMPTY);
+    setCardioForm(cardioEmpty());
   }
 
   function startRoutine(routine) {
@@ -191,6 +218,7 @@ export default function GymTracker({ unit }) {
 
       {subTab === 'Strength' && (
         <>
+          <TodaysSets workouts={workouts} unit={unit} onDelete={id => setWorkouts(p=>p.filter(w=>w.id!==id))}/>
           <Card>
             <CardTitle>Log Set</CardTitle>
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-3">

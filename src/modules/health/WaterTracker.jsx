@@ -61,12 +61,13 @@ export default function WaterTracker() {
   return (
     <div className="space-y-4">
       <Card>
-        <div className="flex items-start justify-between mb-4">
+        <div className="flex items-start justify-between mb-1">
           <CardTitle className="mb-0">Daily Water Intake</CardTitle>
           <button onClick={()=>{setEditGoal(!editGoal);setGoalInput(String(goal));}} className="p-1.5 hover:bg-gray-700 rounded-lg text-gray-400 hover:text-white">
             <Settings2 size={14}/>
           </button>
         </div>
+        <p className="text-xs text-gray-600 mb-4">Default goal: 8 cups — tap <Settings2 size={10} className="inline"/> to adjust</p>
 
         {editGoal && (
           <div className="flex gap-2 mb-4">

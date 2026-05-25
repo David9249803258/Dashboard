@@ -64,15 +64,27 @@ export default function MacroProgress({ totals, settings }) {
   const fatCals     = fat     * 9;
   const totalMacroCals = proteinCals + carbsCals + fatCals;
 
+  const goalProteinCals = proteinGoal * 4;
+  const goalCarbsCals   = carbsGoal   * 4;
+  const goalFatCals     = fatGoal     * 9;
+  const goalTotal       = goalProteinCals + goalCarbsCals + goalFatCals;
+
+  const isNoData = totalMacroCals === 0;
+  const isGoalDonut = isNoData && goalTotal > 0;
+
   const donutData = totalMacroCals > 0
     ? [
         { name: `Protein ${Math.round(proteinCals / totalMacroCals * 100)}%`, value: proteinCals },
         { name: `Carbs ${Math.round(carbsCals / totalMacroCals * 100)}%`,     value: carbsCals   },
         { name: `Fat ${Math.round(fatCals / totalMacroCals * 100)}%`,         value: fatCals     },
       ]
-    : [{ name: 'No data', value: 1 }];
-
-  const isNoData = totalMacroCals === 0;
+    : goalTotal > 0
+      ? [
+          { name: `Protein ${Math.round(goalProteinCals / goalTotal * 100)}%`, value: goalProteinCals },
+          { name: `Carbs ${Math.round(goalCarbsCals / goalTotal * 100)}%`,     value: goalCarbsCals   },
+          { name: `Fat ${Math.round(goalFatCals / goalTotal * 100)}%`,         value: goalFatCals     },
+        ]
+      : [{ name: 'No data', value: 1 }];
 
   return (
     <div className="space-y-4">
@@ -90,30 +102,35 @@ export default function MacroProgress({ totals, settings }) {
 
         {/* Donut chart */}
         <Card>
-          <CardTitle>Macro Split</CardTitle>
-          {isNoData ? (
+          <CardTitle>{isGoalDonut ? 'Goal Macro Split' : 'Macro Split'}</CardTitle>
+          {isNoData && !isGoalDonut ? (
             <div className="flex items-center justify-center h-40 text-sm text-gray-500">
               Log food to see your macro split
             </div>
           ) : (
-            <ResponsiveContainer width="100%" height={200}>
-              <PieChart>
-                <Pie data={donutData} cx="50%" cy="50%" innerRadius={55} outerRadius={80}
-                  dataKey="value" paddingAngle={3} startAngle={90} endAngle={-270}>
-                  {donutData.map((_, i) => (
-                    <Cell key={i} fill={DONUT_COLORS[i % DONUT_COLORS.length]} stroke="transparent" />
-                  ))}
-                </Pie>
-                <Tooltip formatter={v => `${Math.round(v)} kcal`}
-                  contentStyle={{ background: '#1f2937', border: '1px solid #374151', borderRadius: 8 }} />
-                <Legend wrapperStyle={{ fontSize: 12 }} />
-              </PieChart>
-            </ResponsiveContainer>
-          )}
-          {!isNoData && (
-            <p className="text-center text-xs text-gray-500 mt-1">
-              Total from macros: {Math.round(totalMacroCals)} kcal
-            </p>
+            <>
+              {isGoalDonut && (
+                <p className="text-xs text-gray-500 mb-2">Your target ratios — log food to see actuals</p>
+              )}
+              <ResponsiveContainer width="100%" height={200}>
+                <PieChart>
+                  <Pie data={donutData} cx="50%" cy="50%" innerRadius={55} outerRadius={80}
+                    dataKey="value" paddingAngle={3} startAngle={90} endAngle={-270}>
+                    {donutData.map((_, i) => (
+                      <Cell key={i} fill={DONUT_COLORS[i % DONUT_COLORS.length]} stroke="transparent" />
+                    ))}
+                  </Pie>
+                  <Tooltip formatter={v => `${Math.round(v)} kcal`}
+                    contentStyle={{ background: '#1f2937', border: '1px solid #374151', borderRadius: 8 }} />
+                  <Legend wrapperStyle={{ fontSize: 12 }} />
+                </PieChart>
+              </ResponsiveContainer>
+              {!isNoData && (
+                <p className="text-center text-xs text-gray-500 mt-1">
+                  Total from macros: {Math.round(totalMacroCals)} kcal
+                </p>
+              )}
+            </>
           )}
         </Card>
       </div>

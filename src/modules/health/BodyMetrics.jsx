@@ -62,6 +62,21 @@ export default function BodyMetrics({ unit }) {
 
         <Card>
           <CardTitle>BMI Calculator</CardTitle>
+          {/* Inline height input */}
+          <div className="mb-3">
+            <Input label="Your height (cm)" type="number" placeholder="175"
+              defaultValue={heightCm || ''}
+              onBlur={e => {
+                const v = +e.target.value;
+                if (v > 0 && v !== heightCm) {
+                  const saved = JSON.parse(localStorage.getItem('app_state') || '{}');
+                  saved.profile = { ...(saved.profile || {}), heightCm: v };
+                  localStorage.setItem('app_state', JSON.stringify(saved));
+                }
+              }}
+            />
+            <p className="text-xs text-gray-600 mt-1">Saved to your profile automatically</p>
+          </div>
           <div className="text-center py-2">
             {bmiVal ? (<>
               <p className="text-4xl font-bold text-indigo-400">{bmiVal}</p>
@@ -69,7 +84,6 @@ export default function BodyMetrics({ unit }) {
               <p className="text-xs text-gray-500 mt-1">{heightCm}cm · {latest.weight}{unit}{latest.bodyFat?` · ${latest.bodyFat}% BF`:''}</p>
             </>) : <p className="text-sm text-gray-500">Log weight to calculate BMI</p>}
           </div>
-          <p className="text-xs text-gray-600 text-center">Update height in Settings → Profile</p>
         </Card>
       </div>
 

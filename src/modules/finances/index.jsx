@@ -38,7 +38,7 @@ function FinanceModuleInner() {
         {TABS.map(t => (
           <button key={t} onClick={() => setTab(t)}
             className={`px-3 py-1.5 rounded-lg text-sm font-medium whitespace-nowrap transition-colors flex-shrink-0 ${
-              tab === t ? 'bg-indigo-600 text-white' : 'text-gray-400 hover:text-white hover:bg-gray-800'
+              tab === t ? 'bg-blue-600 text-white' : 'text-gray-400 hover:text-white hover:bg-gray-800'
             }`}>
             {t}
           </button>

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Modal } from './ui/Modal';
 import { Button } from './ui/Button';
 import { Input, Select, Textarea } from './ui/Input';
@@ -12,11 +12,13 @@ const PRIORITIES = ['High','Medium','Low'];
 const EXP_CATS = ['Housing','Food','Transport','Entertainment','Health','Shopping','Subscriptions','Other'];
 const MEAL_TYPES = ['Breakfast','Lunch','Dinner','Snacks'];
 
-export function QuickAddModal({ open, onClose }) {
-  const [tab,   setTab]   = useState('Task');
+export function QuickAddModal({ open, onClose, defaultTab = 'Task' }) {
+  const [tab,   setTab]   = useState(defaultTab);
   const [vals,  setVals]  = useState({});
   const [saved, setSaved] = useState(false);
   const set = (k, v) => setVals(p => ({ ...p, [k]: v }));
+
+  useEffect(() => { if (open) { setTab(defaultTab); setVals({}); setSaved(false); } }, [open, defaultTab]);
 
   function reset() { setVals({}); setSaved(false); }
 

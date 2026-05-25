@@ -6,21 +6,12 @@ import { Button } from '../../components/ui/Button';
 import { Input, Select } from '../../components/ui/Input';
 import { EmptyState } from '../../components/ui/EmptyState';
 import { today, uuid, calcStreak } from '../../lib/utils';
+import { DEFAULT_GROOMING_HABITS } from '../../data/defaultGroomingHabits';
 
 const FREQUENCIES = ['Daily','Weekly'];
 
-const DEFAULT_TASKS = [
-  { name: 'Skincare morning routine', frequency: 'Daily' },
-  { name: 'Skincare evening routine', frequency: 'Daily' },
-  { name: 'Haircut / styling',        frequency: 'Weekly' },
-  { name: 'Nails',                    frequency: 'Weekly' },
-  { name: 'Facial hair maintenance',  frequency: 'Daily'  },
-];
-
-const DEFAULT_HABIT_LIST = DEFAULT_TASKS.map(t => ({ ...t, id: crypto.randomUUID() }));
-
 export default function GroomingChecklist() {
-  const [tasks, setTasks] = useModuleData('appearance_grooming', DEFAULT_HABIT_LIST);
+  const [tasks, setTasks] = useModuleData('appearance_grooming', DEFAULT_GROOMING_HABITS);
   const [logs,  setLogs]  = useModuleData('appearance_grooming_logs', {});
   const [form, setForm]   = useState({ name: '', frequency: 'Daily' });
   const [error, setError] = useState('');

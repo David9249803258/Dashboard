@@ -108,6 +108,33 @@ export default function Settings() {
     window.location.reload();
   }
 
+  function downloadCSV(filename, rows) {
+    if (!rows.length) { alert('No data to export'); return; }
+    const headers = Object.keys(rows[0]);
+    const csv = [headers.join(','), ...rows.map(r => headers.map(h => JSON.stringify(r[h] ?? '')).join(','))].join('\n');
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
+    a.download = filename; a.click();
+  }
+
+  function exportHealthCSV() {
+    const workouts = (localGet('health_workouts') || []).map(w => ({ type: 'Strength', date: w.date, exercise: w.exercise, sets: w.sets, reps: w.reps, weight: w.weight, unit: w.unit }));
+    const cardio   = (localGet('health_cardio')   || []).map(c => ({ type: 'Cardio',   date: c.date, exercise: c.activity, sets: '', reps: '', weight: c.duration + 'min', unit: '' }));
+    downloadCSV(`health_${today()}.csv`, [...workouts, ...cardio]);
+  }
+
+  function exportNutritionCSV() {
+    downloadCSV(`nutrition_${today()}.csv`, localGet('nutrition_logs') || []);
+  }
+
+  function exportFinanceCSV() {
+    downloadCSV(`finance_${today()}.csv`, localGet('fin_transactions') || []);
+  }
+
+  function exportGoalsCSV() {
+    downloadCSV(`goals_${today()}.csv`, (localGet('goals_list') || []).map(g => ({ id: g.id, title: g.title, category: g.category, status: g.status, targetDate: g.targetDate, description: g.description })));
+  }
+
   return (
     <div className="max-w-2xl mx-auto space-y-4">
       <h1 className="text-xl font-bold text-white">Settings</h1>
@@ -160,10 +187,13 @@ export default function Settings() {
                 <Select label="Currency" value={profile.currency||'USD'} onChange={e=>saveProfile('currency',e.target.value)}>
                   {['USD','EUR','GBP','CAD','AUD'].map(c=><option key={c}>{c}</option>)}
                 </Select>
-                <Select label="Timezone" value={profile.timezone||Intl.DateTimeFormat().resolvedOptions().timeZone}
-                  onChange={e=>saveProfile('timezone',e.target.value)}>
-                  {TIMEZONES.slice(0,50).map(tz=><option key={tz}>{tz}</option>)}
-                </Select>
+                <div>
+                  <Select label="Timezone" value={profile.timezone||'America/New_York'}
+                    onChange={e=>saveProfile('timezone',e.target.value)}>
+                    {TIMEZONES.slice(0,50).map(tz=><option key={tz}>{tz}</option>)}
+                  </Select>
+                  <p className="text-xs text-gray-500 mt-1">Affects all dates and times throughout the app</p>
+                </div>
               </div>
               {saved && <p className="text-xs text-green-400">✓ Saved</p>}
             </div>
@@ -260,14 +290,30 @@ export default function Settings() {
             <CardTitle>Data Management</CardTitle>
             <div className="space-y-3">
               {[
-                ['Export All Data','Download a JSON backup','Export JSON', exportAll,'secondary'],
-                ['Import Backup','Restore from a JSON file','Import JSON', ()=>fileRef.current?.click(),'secondary'],
+                ['Export All Data','Download a full JSON backup of all your data','Export JSON', exportAll,'secondary'],
+                ['Import Backup','Restore from a previously exported JSON file','Import JSON', ()=>fileRef.current?.click(),'secondary'],
               ].map(([title,desc,label,action,variant])=>(
                 <div key={title} className="flex items-center justify-between p-3 bg-gray-800 rounded-xl">
                   <div><p className="text-sm font-medium text-white">{title}</p><p className="text-xs text-gray-400">{desc}</p></div>
                   <Button size="sm" variant={variant} onClick={action}>{label}</Button>
                 </div>
               ))}
+
+              {/* Per-module CSV exports */}
+              <div className="p-3 bg-gray-800 rounded-xl space-y-2">
+                <p className="text-sm font-medium text-white">Export Module CSVs</p>
+                <p className="text-xs text-gray-400 mb-2">Download spreadsheet-ready data per section</p>
+                <div className="flex flex-wrap gap-2">
+                  {[
+                    ['Health',    exportHealthCSV],
+                    ['Nutrition', exportNutritionCSV],
+                    ['Finance',   exportFinanceCSV],
+                    ['Goals',     exportGoalsCSV],
+                  ].map(([label, fn]) => (
+                    <Button key={label} size="sm" variant="secondary" onClick={fn}>{label} CSV</Button>
+                  ))}
+                </div>
+              </div>
               <div className="flex items-center justify-between p-3 bg-red-900/20 border border-red-800/50 rounded-xl">
                 <div><p className="text-sm font-medium text-red-300">Reset All Data</p><p className="text-xs text-gray-400">Permanently delete everything</p></div>
                 <Button size="sm" variant="danger" onClick={()=>setResetOpen(true)}>Reset</Button>

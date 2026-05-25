@@ -21,15 +21,16 @@ function playAlert() {
 }
 
 export default function PomodoroTimer() {
-  const [sessions,  setSessions]  = useModuleData('productivity_pomodoro',         {});
-  const [history,   setHistory]   = useModuleData('productivity_pomodoro_history', []);
-  const [workMins,  setWorkMins]  = useState(25);
-  const [breakMins, setBreakMins] = useState(5);
-  const [mode,      setMode]      = useState('work');
-  const [timeLeft,  setTime]      = useState(25 * 60);
-  const [running,   setRunning]   = useState(false);
-  const [linkedTask, setLinkedTask] = useState('');
-  const intervalRef = useRef(null);
+  const [sessions,     setSessions]    = useModuleData('productivity_pomodoro',         {});
+  const [history,      setHistory]     = useModuleData('productivity_pomodoro_history', []);
+  const [workMins,     setWorkMins]    = useState(25);
+  const [breakMins,    setBreakMins]   = useState(5);
+  const [mode,         setMode]        = useState('work');
+  const [timeLeft,     setTime]        = useState(25 * 60);
+  const [running,      setRunning]     = useState(false);
+  const [linkedTask,   setLinkedTask]  = useState('');
+  const [pendingEntry, setPending]     = useState(null); // session awaiting focus score
+  const intervalRef  = useRef(null);
   const sessionStart = useRef(null);
 
   const t = today();
@@ -51,8 +52,8 @@ export default function PomodoroTimer() {
         if (mode === 'work') {
           setSessions(s => ({ ...s, [t]: (s[t]||0) + 1 }));
           const taskName = activeTasks.find(tk=>tk.id===linkedTask)?.text || '';
-          setHistory(h => [...h, { id:uuid(), date:t, task:taskName, duration:workMins, completed:true, createdAt:new Date().toISOString() }]);
-          setMode('break'); setTime(breakMins * 60);
+          const entry = { id:uuid(), date:t, task:taskName, duration:workMins, completed:true, createdAt:new Date().toISOString() };
+          setPending(entry); // show focus score prompt before saving
         } else { setMode('work'); setTime(workMins * 60); }
         return 0;
       }
@@ -86,11 +87,40 @@ export default function PomodoroTimer() {
     setTime(mode === 'work' ? workMins * 60 : breakMins * 60);
   }
 
+  function rateSession(score) {
+    if (!pendingEntry) return;
+    setHistory(h => [...h, { ...pendingEntry, focusScore: score }]);
+    setPending(null);
+    setMode('break'); setTime(breakMins * 60);
+  }
+
   const r = 54, cx = 64, circ = 2 * Math.PI * r;
   const offset = circ * (1 - pct / 100);
 
+  const avgFocus = history.length
+    ? (history.filter(s=>s.focusScore).reduce((a,s)=>a+s.focusScore,0) / history.filter(s=>s.focusScore).length).toFixed(1)
+    : null;
+
   return (
     <div className="space-y-4">
+      {/* Focus score prompt */}
+      {pendingEntry && (
+        <Card>
+          <div className="text-center py-2">
+            <p className="text-base font-semibold text-white mb-1">Session complete! 🍅</p>
+            <p className="text-sm text-gray-400 mb-4">How focused were you?</p>
+            <div className="flex justify-center gap-2">
+              {[1,2,3,4,5].map(n => (
+                <button key={n} onClick={() => rateSession(n)}
+                  className="w-10 h-10 rounded-xl bg-gray-800 hover:bg-indigo-600 text-white font-bold text-lg transition-colors border border-gray-700 hover:border-indigo-500">
+                  {n}
+                </button>
+              ))}
+            </div>
+            <button onClick={() => rateSession(null)} className="mt-3 text-xs text-gray-500 hover:text-gray-300">Skip</button>
+          </div>
+        </Card>
+      )}
       <Card>
         <CardTitle>Pomodoro Timer</CardTitle>
         <div className="flex flex-col items-center gap-4">
@@ -149,20 +179,25 @@ export default function PomodoroTimer() {
       {/* Session history */}
       {history.length > 0 && (
         <Card>
-          <CardTitle>Session History</CardTitle>
+          <div className="flex items-baseline justify-between mb-3">
+            <CardTitle className="mb-0">Session History</CardTitle>
+            {avgFocus && <span className="text-xs text-gray-400">Avg focus: <span className="text-indigo-400 font-semibold">{avgFocus}/5</span></span>}
+          </div>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead><tr className="text-left text-gray-500 border-b border-gray-800">
                 <th className="pb-2 pr-4">Date</th>
                 <th className="pb-2 pr-4">Task</th>
-                <th className="pb-2 pr-4">Duration</th>
+                <th className="pb-2 pr-4">Dur</th>
+                <th className="pb-2">Focus</th>
               </tr></thead>
               <tbody>
                 {[...history].reverse().slice(0,20).map(s=>(
                   <tr key={s.id} className="border-b border-gray-800/50">
                     <td className="py-1.5 pr-4 text-gray-400">{s.date}</td>
-                    <td className="py-1.5 pr-4 text-gray-300 max-w-[200px] truncate">{s.task||'—'}</td>
-                    <td className="py-1.5 text-gray-300">{s.duration}m</td>
+                    <td className="py-1.5 pr-4 text-gray-300 max-w-[160px] truncate">{s.task||'—'}</td>
+                    <td className="py-1.5 pr-4 text-gray-300">{s.duration}m</td>
+                    <td className="py-1.5 text-indigo-400 font-medium">{s.focusScore ? `${s.focusScore}/5` : '—'}</td>
                   </tr>
                 ))}
               </tbody>

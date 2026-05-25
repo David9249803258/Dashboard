@@ -1,9 +1,21 @@
-export const today = () => new Date().toISOString().slice(0, 10);
+const TZ = 'America/New_York';
+
+// Returns YYYY-MM-DD in Eastern Time
+export const today = () =>
+  new Date().toLocaleDateString('en-CA', { timeZone: TZ });
 
 export const fmtDate = (d) => {
   if (!d) return '';
   const dt = new Date(d + 'T00:00:00');
   return dt.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+};
+
+// "Sunday, May 21" format
+export const fmtDateFull = (d) => {
+  if (!d) return '';
+  return new Date(d + 'T00:00:00').toLocaleDateString('en-US', {
+    weekday: 'long', month: 'long', day: 'numeric',
+  });
 };
 
 export const fmtCurrency = (n) =>
@@ -24,7 +36,7 @@ export const getLast7Days = () => {
   return Array.from({ length: 7 }, (_, i) => {
     const d = new Date();
     d.setDate(d.getDate() - (6 - i));
-    return d.toISOString().slice(0, 10);
+    return d.toLocaleDateString('en-CA', { timeZone: TZ });
   });
 };
 
@@ -32,7 +44,7 @@ export const getLast30Days = () => {
   return Array.from({ length: 30 }, (_, i) => {
     const d = new Date();
     d.setDate(d.getDate() - (29 - i));
-    return d.toISOString().slice(0, 10);
+    return d.toLocaleDateString('en-CA', { timeZone: TZ });
   });
 };
 
@@ -77,7 +89,7 @@ export const calcStreak = (dates) => {
   const sorted = [...new Set(dates)].sort().reverse();
   let streak = 0, cur = today();
   for (const d of sorted) {
-    if (d === cur) { streak++; const dt = new Date(cur); dt.setDate(dt.getDate() - 1); cur = dt.toISOString().slice(0, 10); }
+    if (d === cur) { streak++; const dt = new Date(cur + 'T12:00:00'); dt.setDate(dt.getDate() - 1); cur = dt.toLocaleDateString('en-CA', { timeZone: TZ }); }
     else if (d < cur) break;
   }
   return streak;

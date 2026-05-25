@@ -5,7 +5,7 @@ import { Card, CardTitle } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Input, Select } from '../../components/ui/Input';
 import { EmptyState } from '../../components/ui/EmptyState';
-import { today, uuid, calcStreak } from '../../lib/utils';
+import { today, uuid, calcStreak, fmtDateFull } from '../../lib/utils';
 
 const EMPTY = { name: '', dose: '', frequency: 'Daily', time: 'Morning' };
 const FREQUENCIES = ['Daily','Weekly','Twice Daily'];
@@ -79,7 +79,7 @@ export default function Supplements() {
       </Card>
 
       <Card>
-        <CardTitle>Today's Checklist — {t}</CardTitle>
+        <CardTitle>Today's Checklist — {fmtDateFull(t)}</CardTitle>
         {sups.length === 0 ? (
           <EmptyState icon="💊" message="No supplements added yet — add one above" />
         ) : (

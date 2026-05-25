@@ -1,10 +1,11 @@
 import { useState, useMemo } from 'react';
-import { Info, Droplets, ExternalLink } from 'lucide-react';
+import { Info, Droplets, ExternalLink, X, Plus } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useModuleData } from '../../lib/useModuleData';
 import { supabase } from '../../services/supabase';
 import { today } from '../../lib/utils';
 import { localGet, localSet } from '../../lib/storage';
+import { ProgressBar } from '../../components/ui/ProgressBar';
 import MealSection from './MealSection';
 import MacroProgress from './MacroProgress';
 import MicroPanel from './MicroPanel';
@@ -69,11 +70,16 @@ export default function NutritionModule() {
         )}
       </div>
 
-      {/* USDA info banner */}
-      <div className="flex items-start gap-3 p-3 bg-gray-800/60 border border-gray-700 rounded-xl text-xs text-gray-400">
-        <Info size={13} className="flex-shrink-0 mt-0.5 text-indigo-400"/>
-        Food search powered by the <span className="text-indigo-400 font-medium">USDA FoodData Central</span> database — over 600,000 foods. Can't find something? Use manual entry or save a custom food.
-      </div>
+      {/* USDA info banner — shown once */}
+      {!localGet('usda_banner_seen') && (
+        <div className="flex items-start gap-3 p-3 bg-gray-800/60 border border-gray-700 rounded-xl text-xs text-gray-400">
+          <Info size={13} className="flex-shrink-0 mt-0.5 text-indigo-400"/>
+          <span>Food search powered by the <span className="text-indigo-400 font-medium">USDA FoodData Central</span> database — over 600,000 foods. Can't find something? Use manual entry or save a custom food.</span>
+          <button onClick={()=>localSet('usda_banner_seen',true)} className="ml-auto flex-shrink-0 text-gray-600 hover:text-gray-300">
+            <X size={13}/>
+          </button>
+        </div>
+      )}
 
       {/* AI recommendation card */}
       {lastRec && tab === 'Log' && (
@@ -86,26 +92,28 @@ export default function NutritionModule() {
         </div>
       )}
 
-      {/* Water stat card */}
+      {/* Water stat card with quick +1 cup */}
       {tab === 'Log' && (
-        <button onClick={() => navigate('/health')}
-          className="w-full flex items-center justify-between p-3 bg-gray-900 border border-gray-800 hover:border-cyan-500/50 rounded-xl transition-colors text-left">
-          <div className="flex items-center gap-3">
+        <div className="flex items-center justify-between p-3 bg-gray-900 border border-gray-800 rounded-xl">
+          <button onClick={() => navigate('/health')} className="flex items-center gap-3 flex-1 text-left">
             <Droplets size={16} className="text-cyan-400"/>
             <div>
               <p className="text-xs font-medium text-cyan-400">Hydration</p>
-              <p className="text-sm text-white">{waterCups}/{waterGoal} cups · {Math.round((waterCups/waterGoal)*100)}% of daily goal</p>
+              <p className="text-sm text-white">{waterCups}/{waterGoal} cups · {Math.round((waterCups/waterGoal)*100)}%</p>
             </div>
-          </div>
-          <ExternalLink size={12} className="text-gray-500"/>
-        </button>
+          </button>
+          <button onClick={()=>{const w=localGet('health_water')||{};const t2=today();w[t2]=(w[t2]||0)+1;localSet('health_water',w);}}
+            className="flex items-center gap-1 px-2.5 py-1 bg-cyan-600/80 hover:bg-cyan-600 rounded-lg text-xs text-white font-medium transition-colors">
+            <Plus size={11}/>Cup
+          </button>
+        </div>
       )}
 
       {/* Tab bar */}
       <div className="flex gap-1 overflow-x-auto pb-1">
         {TABS.map(t => (
           <button key={t} onClick={()=>setTab(t)}
-            className={`px-3 py-1.5 rounded-lg text-sm font-medium whitespace-nowrap transition-colors flex-shrink-0 ${tab===t?'bg-indigo-600 text-white':'text-gray-400 hover:text-white hover:bg-gray-800'}`}>
+            className={`px-3 py-1.5 rounded-lg text-sm font-medium whitespace-nowrap transition-colors flex-shrink-0 ${tab===t?'bg-green-600 text-white':'text-gray-400 hover:text-white hover:bg-gray-800'}`}>
             {t}
           </button>
         ))}
@@ -114,9 +122,20 @@ export default function NutritionModule() {
       <div className="page-enter" key={tab}>
         {tab === 'Log' && (
           <div className="space-y-4">
+            {/* Calorie goal progress bar */}
+            {settings.calorieGoal > 0 && (
+              <div className="p-3 bg-gray-900 border border-gray-800 rounded-xl">
+                <div className="flex justify-between text-xs mb-1.5">
+                  <span className="text-gray-400">Calories today</span>
+                  <span className="text-white font-semibold">{Math.round(totals.calories)} <span className="text-gray-500 font-normal">/ {settings.calorieGoal} kcal</span></span>
+                </div>
+                <ProgressBar value={totals.calories} max={settings.calorieGoal}
+                  color={totals.calories > settings.calorieGoal * 1.1 ? 'red' : totals.calories >= settings.calorieGoal * 0.8 ? 'green' : 'yellow'}/>
+              </div>
+            )}
             {/* Compact macro summary */}
             <div className="grid grid-cols-4 gap-2">
-              {[['Cals',Math.round(totals.calories),settings.calorieGoal||0,''],['P',totals.protein,settings.proteinGoal,'g'],['C',totals.carbs,settings.carbsGoal,'g'],['F',totals.fat,settings.fatGoal,'g']].map(([label,val,goal,unit])=>{
+              {[['Cals',Math.round(totals.calories),settings.calorieGoal||0,''],['Protein',totals.protein,settings.proteinGoal,'g'],['Carbs',totals.carbs,settings.carbsGoal,'g'],['Fat',totals.fat,settings.fatGoal,'g']].map(([label,val,goal,unit])=>{
                 const r = goal > 0 ? val/goal : 0;
                 const barColor = label==='P' ? (r>=0.9?'bg-green-500':r>=0.5?'bg-yellow-500':'bg-gray-600') : (r<=0.85?'bg-indigo-500':r<=1?'bg-yellow-500':'bg-red-500');
                 const textColor = label==='P' ? (r>=0.9?'text-green-400':r>=0.5?'text-yellow-400':'text-gray-400') : (r<=0.85?'text-gray-400':r<=1?'text-yellow-400':'text-red-400');

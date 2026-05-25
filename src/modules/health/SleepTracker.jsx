@@ -61,6 +61,10 @@ export default function SleepTracker() {
 
   return (
     <div className="space-y-4">
+      <div className="flex items-center gap-2 px-3 py-2 bg-blue-500/10 border border-blue-500/20 rounded-xl text-xs text-blue-300">
+        💡 <span>Tip: log sleep in the morning for the previous night — set the date to yesterday.</span>
+      </div>
+
       <Card>
         <CardTitle>Log Sleep</CardTitle>
         <div className="grid grid-cols-3 gap-3 mb-3">
