@@ -7,8 +7,6 @@ import { Input, Select } from '../../components/ui/Input';
 import { EmptyState } from '../../components/ui/EmptyState';
 import { today, uuid, calcStreak } from '../../lib/utils';
 
-const DEFAULT_HABIT_LIST = DEFAULT_TASKS.map(t => ({ ...t, id: crypto.randomUUID() }));
-
 const FREQUENCIES = ['Daily','Weekly'];
 
 const DEFAULT_TASKS = [
@@ -18,6 +16,8 @@ const DEFAULT_TASKS = [
   { name: 'Nails',                    frequency: 'Weekly' },
   { name: 'Facial hair maintenance',  frequency: 'Daily'  },
 ];
+
+const DEFAULT_HABIT_LIST = DEFAULT_TASKS.map(t => ({ ...t, id: crypto.randomUUID() }));
 
 export default function GroomingChecklist() {
   const [tasks, setTasks] = useModuleData('appearance_grooming', DEFAULT_HABIT_LIST);
