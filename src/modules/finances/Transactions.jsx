@@ -9,7 +9,7 @@ import { Badge } from '../../components/ui/Badge';
 import { EmptyState } from '../../components/ui/EmptyState';
 import { fmtCurrency, today, downloadCSV } from '../../lib/utils';
 import { CHART_COLORS } from '../../lib/constants';
-import CsvImport from './CsvImport';
+import StatementImport from './StatementImport';
 
 const PAGE_SIZE = 25;
 const ALL_CATS  = ['All', ...EXPENSE_CATEGORIES, ...INCOME_CATEGORIES];
@@ -232,7 +232,7 @@ export default function Transactions({ openImport, setOpenImport }) {
 
   return (
     <div className="space-y-4">
-      <CsvImport open={openImport} onClose={() => setOpenImport(false)} />
+      <StatementImport open={openImport} onClose={() => setOpenImport(false)} />
 
       {/* Add transaction form */}
       <Card>

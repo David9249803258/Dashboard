@@ -137,8 +137,8 @@ export default function NutritionModule() {
             <div className="grid grid-cols-4 gap-2">
               {[['Cals',Math.round(totals.calories),settings.calorieGoal||0,''],['Protein',totals.protein,settings.proteinGoal,'g'],['Carbs',totals.carbs,settings.carbsGoal,'g'],['Fat',totals.fat,settings.fatGoal,'g']].map(([label,val,goal,unit])=>{
                 const r = goal > 0 ? val/goal : 0;
-                const barColor = label==='P' ? (r>=0.9?'bg-green-500':r>=0.5?'bg-yellow-500':'bg-gray-600') : (r<=0.85?'bg-indigo-500':r<=1?'bg-yellow-500':'bg-red-500');
-                const textColor = label==='P' ? (r>=0.9?'text-green-400':r>=0.5?'text-yellow-400':'text-gray-400') : (r<=0.85?'text-gray-400':r<=1?'text-yellow-400':'text-red-400');
+                const barColor = label==='Protein' ? (r>=0.9?'bg-green-500':r>=0.5?'bg-yellow-500':'bg-gray-600') : (r<=0.85?'bg-indigo-500':r<=1?'bg-yellow-500':'bg-red-500');
+                const textColor = label==='Protein' ? (r>=0.9?'text-green-400':r>=0.5?'text-yellow-400':'text-gray-400') : (r<=0.85?'text-gray-400':r<=1?'text-yellow-400':'text-red-400');
                 return (
                   <div key={label} className="bg-gray-900 border border-gray-800 rounded-xl p-2.5 text-center">
                     <p className={`text-sm font-bold tabular-nums ${textColor}`}>{val}{unit}</p>

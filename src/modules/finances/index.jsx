@@ -1,7 +1,5 @@
 import { useState } from 'react';
-import { Upload } from 'lucide-react';
 import { FinanceProvider } from './FinanceContext';
-import { Button } from '../../components/ui/Button';
 import Home from './Home';
 import Transactions from './Transactions';
 import Budget from './Budget';
@@ -28,9 +26,6 @@ function FinanceModuleInner() {
       {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-2">
         <h1 className="text-xl font-bold text-white">Finances</h1>
-        <Button variant="secondary" size="sm" onClick={() => { setTab('Transactions'); setOpenImport(true); }}>
-          <Upload size={13} /> Import CSV
-        </Button>
       </div>
 
       {/* Tab bar */}
