@@ -1,29 +1,24 @@
 import { useState } from 'react';
 import { FinanceProvider } from './FinanceContext';
-import Home from './Home';
-import Transactions from './Transactions';
-import Budget from './Budget';
-import Subscriptions from './Subscriptions';
-import Income from './Income';
-import BillCalendar from './BillCalendar';
-import SavingsGoals from './SavingsGoals';
-import DebtPayoff from './DebtPayoff';
 import NetWorth from './NetWorth';
+import BalanceSheet from './BalanceSheet';
+import Income from './Income';
+import Forecast from './Forecast';
+import Projects from './Projects';
 
 const TABS = [
-  'Home', 'Transactions', 'Budget', 'Income',
-  'Bills', 'Subscriptions', 'Savings', 'Debt', 'Net Worth',
+  { id: 'Net Worth',    label: 'Net Worth'    },
+  { id: 'Balance Sheet',label: 'Balance Sheet'},
+  { id: 'Income',       label: 'Income'       },
+  { id: 'Forecast',     label: 'Forecast'     },
+  { id: 'Projects',     label: 'Projects'     },
 ];
 
 function FinanceModuleInner() {
-  const [tab,        setTab]        = useState('Home');
-  const [openImport, setOpenImport] = useState(false);
-
-  function navigate(t) { setTab(t); }
+  const [tab, setTab] = useState('Net Worth');
 
   return (
     <div className="max-w-5xl mx-auto space-y-4">
-      {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-2">
         <h1 className="text-xl font-bold text-white">Finances</h1>
       </div>
@@ -31,26 +26,26 @@ function FinanceModuleInner() {
       {/* Tab bar */}
       <div className="flex gap-1 overflow-x-auto pb-1 scrollbar-thin">
         {TABS.map(t => (
-          <button key={t} onClick={() => setTab(t)}
-            className={`px-3 py-1.5 rounded-lg text-sm font-medium whitespace-nowrap transition-colors flex-shrink-0 ${
-              tab === t ? 'bg-blue-600 text-white' : 'text-gray-400 hover:text-white hover:bg-gray-800'
-            }`}>
-            {t}
+          <button
+            key={t.id}
+            onClick={() => setTab(t.id)}
+            className={`px-3.5 py-1.5 rounded-xl text-sm font-medium whitespace-nowrap transition-all duration-150 flex-shrink-0 ${
+              tab === t.id
+                ? 'bg-sky-600 text-white shadow-sm shadow-sky-500/25'
+                : 'text-slate-400 hover:text-white hover:bg-slate-800/70'
+            }`}
+          >
+            {t.label}
           </button>
         ))}
       </div>
 
-      {/* Page content */}
       <div className="page-enter" key={tab}>
-        {tab === 'Home'          && <Home onNavigate={navigate} />}
-        {tab === 'Transactions'  && <Transactions openImport={openImport} setOpenImport={setOpenImport} />}
-        {tab === 'Budget'        && <Budget />}
-        {tab === 'Income'        && <Income />}
-        {tab === 'Bills'         && <BillCalendar />}
-        {tab === 'Subscriptions' && <Subscriptions />}
-        {tab === 'Savings'       && <SavingsGoals />}
-        {tab === 'Debt'          && <DebtPayoff />}
         {tab === 'Net Worth'     && <NetWorth />}
+        {tab === 'Balance Sheet' && <BalanceSheet />}
+        {tab === 'Income'        && <Income />}
+        {tab === 'Forecast'      && <Forecast />}
+        {tab === 'Projects'      && <Projects />}
       </div>
     </div>
   );

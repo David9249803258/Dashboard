@@ -3,22 +3,40 @@
 @tailwind utilities;
 
 @layer base {
-  html { font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', Roboto, sans-serif; }
-  body { @apply bg-gray-950 text-white; }
+  html {
+    font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', Roboto, sans-serif;
+    font-size: 15px;
+  }
+  body { @apply bg-slate-950 text-white; }
   *, *::before, *::after { box-sizing: border-box; }
-  ::-webkit-scrollbar { width: 6px; height: 6px; }
-  ::-webkit-scrollbar-track { @apply bg-gray-900; }
-  ::-webkit-scrollbar-thumb { @apply bg-gray-700 rounded-full; }
+  ::-webkit-scrollbar { width: 4px; height: 4px; }
+  ::-webkit-scrollbar-track { @apply bg-slate-900; }
+  ::-webkit-scrollbar-thumb { @apply bg-slate-700 rounded-full; }
   input[type="number"]::-webkit-outer-spin-button,
   input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; }
   input[type="date"]::-webkit-calendar-picker-indicator { filter: invert(1) opacity(0.4); }
+  input[type="range"] { @apply accent-indigo-500; }
 }
 
 @layer utilities {
-  .page-enter { animation: fadeIn 150ms ease-out; }
+  .page-enter { animation: fadeIn 200ms ease-out; }
+  .card-base {
+    @apply bg-gradient-to-br from-slate-900 to-slate-800/60 border border-slate-700/50 rounded-2xl;
+  }
+  .tab-active-health       { @apply bg-rose-500/15 text-rose-400 border border-rose-500/20; }
+  .tab-active-nutrition    { @apply bg-emerald-500/15 text-emerald-400 border border-emerald-500/20; }
+  .tab-active-finances     { @apply bg-sky-500/15 text-sky-400 border border-sky-500/20; }
+  .tab-active-productivity { @apply bg-violet-500/15 text-violet-400 border border-violet-500/20; }
+  .tab-active-goals        { @apply bg-amber-500/15 text-amber-400 border border-amber-500/20; }
+  .tab-active-appearance   { @apply bg-teal-500/15 text-teal-400 border border-teal-500/20; }
 }
 
 @keyframes fadeIn {
-  from { opacity: 0; transform: translateY(4px); }
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(12px); }
   to   { opacity: 1; transform: translateY(0); }
 }

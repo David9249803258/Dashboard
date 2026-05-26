@@ -9,7 +9,6 @@ import GlobalSearch from './GlobalSearch';
 import { Modal } from './ui/Modal';
 import { ProgressBar } from './ui/ProgressBar';
 
-// ── Score calculation (exported for reuse) ────────────────────────────────────
 export function computeDailyScore() {
   const t = today();
   const water     = localGet('health_water') || {};
@@ -32,7 +31,6 @@ export function computeDailyScore() {
   const taskDone   = todayTasks.filter(tk => tk.done).length;
   const taskPts    = todayTasks.length > 0 ? Math.min(20, Math.round((taskDone / todayTasks.length) * 20)) : 0;
 
-  // Budget score + nutrition calorie bonus
   const month     = t.slice(0, 7);
   const monthTxns = txns.filter(tx => tx.date?.startsWith(month) && tx.type !== 'income');
   let budgetOK    = true;
@@ -49,33 +47,33 @@ export function computeDailyScore() {
   return {
     score: Math.min(100, waterPts + workoutPts + sleepPts + taskPts + budgetPts),
     components: [
-      { label: 'Tasks completed', pts: taskPts,   max: 20, detail: `${taskDone}/${todayTasks.length} tasks done` },
-      { label: 'Water goal hit',  pts: waterPts,   max: 20, detail: `${waterVal}/${waterGoal} cups` },
-      { label: 'Workout logged',  pts: workoutPts, max: 20, detail: workoutPts ? 'Logged today ✓' : 'None today' },
-      { label: 'Sleep logged',    pts: sleepPts,   max: 20, detail: sleepPts ? 'Logged last night ✓' : 'Not logged' },
-      { label: 'Budget / Nutrition', pts: budgetPts, max: 20, detail: caloriesHit ? 'Calorie goal hit ✓' : budgetOK ? 'All categories on budget ✓' : 'Over budget in some categories' },
+      { label: 'Tasks completed',    pts: taskPts,    max: 20, detail: `${taskDone}/${todayTasks.length} tasks done` },
+      { label: 'Water goal hit',     pts: waterPts,   max: 20, detail: `${waterVal}/${waterGoal} cups` },
+      { label: 'Workout logged',     pts: workoutPts, max: 20, detail: workoutPts ? 'Logged today ✓' : 'None today' },
+      { label: 'Sleep logged',       pts: sleepPts,   max: 20, detail: sleepPts ? 'Logged last night ✓' : 'Not logged' },
+      { label: 'Budget / Nutrition', pts: budgetPts,  max: 20, detail: caloriesHit ? 'Calorie goal hit ✓' : budgetOK ? 'All categories on budget ✓' : 'Over budget in some categories' },
     ],
   };
 }
 
-function ScoreModal({ onClose }) {
+function ScoreModal() {
   const { score, components } = computeDailyScore();
-  const color = score >= 70 ? 'text-green-400' : score >= 40 ? 'text-yellow-400' : 'text-red-400';
+  const color = score >= 70 ? 'text-emerald-400' : score >= 40 ? 'text-amber-400' : 'text-red-400';
   return (
     <div className="space-y-4">
       <div className="text-center">
         <p className={`text-5xl font-bold tabular-nums ${color}`}>{score}</p>
-        <p className="text-sm text-gray-400 mt-1">/ 100 today</p>
+        <p className="text-sm text-slate-400 mt-1">/ 100 today</p>
       </div>
       <div className="space-y-3">
         {components.map(c => (
           <div key={c.label}>
             <div className="flex items-center justify-between text-sm mb-1">
-              <span className="text-gray-300">{c.label}</span>
-              <span className={`font-semibold ${c.pts >= c.max ? 'text-green-400' : 'text-gray-400'}`}>{c.pts}/{c.max}</span>
+              <span className="text-slate-300">{c.label}</span>
+              <span className={`font-semibold ${c.pts >= c.max ? 'text-emerald-400' : 'text-slate-400'}`}>{c.pts}/{c.max}</span>
             </div>
             <ProgressBar value={c.pts} max={c.max} color={c.pts >= c.max ? 'green' : c.pts > 0 ? 'yellow' : 'red'} />
-            <p className="text-xs text-gray-500 mt-0.5">{c.detail}</p>
+            <p className="text-xs text-slate-500 mt-0.5">{c.detail}</p>
           </div>
         ))}
       </div>
@@ -90,10 +88,10 @@ function LiveClock() {
     return () => clearInterval(id);
   }, []);
   return (
-    <span className="text-sm text-gray-300 font-mono tabular-nums hidden sm:inline">
-      {time.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
+    <span className="text-sm text-slate-300 font-mono tabular-nums hidden sm:inline">
+      {time.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'America/New_York' })}
       {' '}
-      {time.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+      {time.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', timeZone: 'America/New_York' })}
     </span>
   );
 }
@@ -104,30 +102,28 @@ export function TopBar({ onMenuClick }) {
   const streak        = calcStreak(state.loginDates);
   const [qaOpen,    setQaOpen]    = useState(false);
   const [scoreOpen, setScoreOpen] = useState(false);
-  const scoreColor = score >= 70 ? 'text-green-400' : score >= 40 ? 'text-yellow-400' : 'text-red-400';
+  const scoreColor = score >= 70 ? 'text-emerald-400' : score >= 40 ? 'text-amber-400' : 'text-red-400';
 
   return (
     <>
-      <header className="fixed top-0 left-0 right-0 lg:left-56 z-20 h-14 bg-gray-950/90 backdrop-blur border-b border-gray-800 flex items-center px-4 gap-3">
-        <button onClick={onMenuClick} className="lg:hidden p-1.5 rounded-md hover:bg-gray-800 text-gray-400">
+      <header className="fixed top-0 left-0 right-0 lg:left-64 z-20 h-14 bg-slate-950/95 backdrop-blur-md border-b border-slate-800/60 flex items-center px-4 gap-3">
+        <button onClick={onMenuClick} className="lg:hidden p-1.5 rounded-xl hover:bg-slate-800 text-slate-400 transition-colors">
           <Menu size={18} />
         </button>
 
         <LiveClock />
         <div className="flex-1" />
 
-        {/* Streak */}
-        <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-gray-800 border border-gray-700">
+        <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-slate-800/80 border border-slate-700/40">
           <Flame size={13} className="text-orange-400" />
           <span className="text-xs font-semibold text-white">{streak}</span>
-          <span className="text-xs text-gray-400 hidden md:inline">day streak</span>
+          <span className="text-xs text-slate-400 hidden md:inline">day streak</span>
         </div>
 
-        {/* Daily score with ? explainer */}
-        <div className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-gray-800 border border-gray-700">
-          <span className="text-xs text-gray-400">Score</span>
+        <div className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-slate-800/80 border border-slate-700/40">
+          <span className="text-xs text-slate-400">Score</span>
           <span className={`text-sm font-bold tabular-nums ${scoreColor}`}>{score}</span>
-          <button onClick={() => setScoreOpen(true)} className="text-gray-600 hover:text-gray-300 transition-colors">
+          <button onClick={() => setScoreOpen(true)} className="text-slate-600 hover:text-slate-300 transition-colors">
             <HelpCircle size={13} />
           </button>
         </div>
@@ -135,9 +131,8 @@ export function TopBar({ onMenuClick }) {
         <GlobalSearch />
         <NotificationCenter />
 
-        {/* Quick add */}
         <button onClick={() => setQaOpen(true)}
-          className="flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-500 text-white px-3 py-1.5 rounded-lg text-sm font-medium transition-colors">
+          className="flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-500 text-white px-3 py-1.5 rounded-xl text-sm font-medium transition-all duration-150 active:scale-[0.97] shadow-sm hover:shadow-indigo-500/25">
           <Plus size={14} />
           <span className="hidden sm:inline">Quick Add</span>
         </button>
@@ -145,7 +140,7 @@ export function TopBar({ onMenuClick }) {
 
       <QuickAddModal open={qaOpen} onClose={() => setQaOpen(false)} />
       <Modal open={scoreOpen} onClose={() => setScoreOpen(false)} title="Daily Score Breakdown" size="sm">
-        <ScoreModal onClose={() => setScoreOpen(false)} />
+        <ScoreModal />
       </Modal>
     </>
   );

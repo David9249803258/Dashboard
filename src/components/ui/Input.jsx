@@ -1,9 +1,9 @@
 export function Input({ label, error, className = '', ...props }) {
   return (
     <div className="flex flex-col gap-1">
-      {label && <label className="text-xs text-gray-400 font-medium">{label}</label>}
+      {label && <label className="text-xs text-slate-400 font-medium">{label}</label>}
       <input
-        className={`bg-gray-800 border ${error ? 'border-red-500' : 'border-gray-700'} rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-indigo-500 transition-colors ${className}`}
+        className={`bg-slate-800/80 border ${error ? 'border-red-500' : 'border-slate-700/60'} rounded-xl px-3 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/30 transition-all ${className}`}
         {...props}
       />
       {error && <p className="text-xs text-red-400">{error}</p>}
@@ -14,9 +14,9 @@ export function Input({ label, error, className = '', ...props }) {
 export function Select({ label, error, children, className = '', ...props }) {
   return (
     <div className="flex flex-col gap-1">
-      {label && <label className="text-xs text-gray-400 font-medium">{label}</label>}
+      {label && <label className="text-xs text-slate-400 font-medium">{label}</label>}
       <select
-        className={`bg-gray-800 border ${error ? 'border-red-500' : 'border-gray-700'} rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-indigo-500 transition-colors ${className}`}
+        className={`bg-slate-800/80 border ${error ? 'border-red-500' : 'border-slate-700/60'} rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/30 transition-all ${className}`}
         {...props}
       >
         {children}
@@ -29,9 +29,9 @@ export function Select({ label, error, children, className = '', ...props }) {
 export function Textarea({ label, error, className = '', ...props }) {
   return (
     <div className="flex flex-col gap-1">
-      {label && <label className="text-xs text-gray-400 font-medium">{label}</label>}
+      {label && <label className="text-xs text-slate-400 font-medium">{label}</label>}
       <textarea
-        className={`bg-gray-800 border ${error ? 'border-red-500' : 'border-gray-700'} rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-indigo-500 transition-colors resize-none ${className}`}
+        className={`bg-slate-800/80 border ${error ? 'border-red-500' : 'border-slate-700/60'} rounded-xl px-3 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/30 transition-all resize-none ${className}`}
         {...props}
       />
       {error && <p className="text-xs text-red-400">{error}</p>}
