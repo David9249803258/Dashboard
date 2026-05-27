@@ -1,17 +1,23 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { Heart, DollarSign, Sparkles, Target, Zap, ArrowRight, CheckCircle2, Droplets, Flame, Calendar, UtensilsCrossed, HelpCircle, ChevronDown, ChevronUp, Plus } from 'lucide-react';
+import { Heart, DollarSign, Sparkles, Target, Zap, ArrowRight, CheckCircle2, Droplets, Flame, Calendar, UtensilsCrossed, HelpCircle, ChevronDown, ChevronUp, Plus, Trash2 } from 'lucide-react';
 import { Card, CardTitle } from '../components/ui/Card';
 import { ProgressBar } from '../components/ui/ProgressBar';
 import { Modal } from '../components/ui/Modal';
 import { QuickAddModal } from '../components/QuickAddModal';
-import { localGet } from '../lib/storage';
-import { today, fmtCurrency, calcStreak } from '../lib/utils';
+import { localGet, localSet } from '../lib/storage';
+import { today, fmtCurrency, calcStreak, uuid } from '../lib/utils';
 import { getDailyQuote } from '../lib/constants';
 import { computeDailyScore } from '../components/TopBar';
+import { ArcGaugeSVG, computeRecoveryScore } from '../modules/health/RecoveryGauge';
+import { supabase } from '../services/supabase';
 
 const MOOD_COLORS = { 1:'bg-red-500', 2:'bg-orange-500', 3:'bg-yellow-500', 4:'bg-blue-500', 5:'bg-green-500' };
 const MOOD_EMOJI  = { 1:'😞', 2:'😕', 3:'😐', 4:'😊', 5:'😄' };
+
+const POS_CATEGORIES = ['Habits', 'Mental', 'Relationships', 'Physical', 'Other'];
+const POS_KEY = 'dashboard_positives';
+const STR_KEY = 'dashboard_struggles';
 
 // ── Score breakdown modal ─────────────────────────────────────────────────────
 function ScoreBreakdown() {
@@ -36,6 +42,44 @@ function ScoreBreakdown() {
         ))}
       </div>
     </div>
+  );
+}
+
+// ── Dashboard Arc gauge ───────────────────────────────────────────────────────
+function DashArcGauge({ score }) {
+  const cx = 70; const cy = 70; const r = 52; const sw = 9;
+  const vw = 140; const vh = 110;
+  const fillColor = score >= 70 ? '#22c55e' : score >= 40 ? '#f59e0b' : '#ef4444';
+
+  function polarPoint(angleDeg) {
+    const rad = ((angleDeg - 90) * Math.PI) / 180;
+    return [cx + r * Math.cos(rad), cy + r * Math.sin(rad)];
+  }
+  function arcPath(startDeg, sweepDeg) {
+    if (sweepDeg <= 0) return '';
+    const clamp = Math.min(sweepDeg, 359.99);
+    const endDeg = (startDeg + clamp) % 360;
+    const [sx, sy] = polarPoint(startDeg);
+    const [ex, ey] = polarPoint(endDeg);
+    const large = clamp > 180 ? 1 : 0;
+    return `M ${sx.toFixed(2)} ${sy.toFixed(2)} A ${r} ${r} 0 ${large} 1 ${ex.toFixed(2)} ${ey.toFixed(2)}`;
+  }
+
+  const bgArc   = arcPath(225, 270);
+  const fillArc = arcPath(225, (score / 100) * 270);
+
+  return (
+    <svg viewBox={`0 0 ${vw} ${vh}`} className="w-36 h-[110px]">
+      <path d={bgArc}   fill="none" stroke="#374151"   strokeWidth={sw} strokeLinecap="round"/>
+      {fillArc && <path d={fillArc} fill="none" stroke={fillColor} strokeWidth={sw} strokeLinecap="round"/>}
+      <text x={cx} y={cy + 8} textAnchor="middle"
+        fill="white" fontSize={24} fontWeight="bold" fontFamily="ui-monospace,monospace">
+        {score}
+      </text>
+      <text x={cx} y={cy + 24} textAnchor="middle" fill="#9ca3af" fontSize={9} letterSpacing="2">
+        PEAK SCORE
+      </text>
+    </svg>
   );
 }
 
@@ -173,6 +217,158 @@ function ActionBtn({ label, onClick }) {
   );
 }
 
+// ── Positives Journal (Today's Wins) ──────────────────────────────────────────
+function PositivesJournal() {
+  const t = today();
+  const [positives, setPositives] = useState(() => localGet(POS_KEY) || []);
+  const [activeTab, setActiveTab]  = useState('Habits');
+  const [inputVal, setInputVal]    = useState('');
+
+  const active = positives.filter(p => !p.archived);
+  const shown  = active.slice(0, 5);
+
+  function save(updated) {
+    setPositives(updated);
+    localSet(POS_KEY, updated);
+    if (supabase) {
+      supabase.from('positives').upsert(updated.map(p => ({
+        id: p.id, category: p.category, text: p.text, date: p.date, archived: p.archived,
+      }))).catch(() => {});
+    }
+  }
+
+  function addPositive() {
+    if (!inputVal.trim()) return;
+    const entry = { id: uuid(), category: activeTab, text: inputVal.trim(), date: t, archived: false, created_at: new Date().toISOString() };
+    save([entry, ...positives]);
+    setInputVal('');
+  }
+
+  function archive(id) {
+    save(positives.map(p => p.id === id ? { ...p, archived: true } : p));
+  }
+
+  function remove(id) {
+    save(positives.filter(p => p.id !== id));
+  }
+
+  return (
+    <Card className="border-green-500/20">
+      <CardTitle>Today's Wins</CardTitle>
+      <p className="text-xs text-gray-500 mb-3">What went well today</p>
+
+      {/* Category tabs */}
+      <div className="flex gap-1 overflow-x-auto pb-1 mb-3">
+        {POS_CATEGORIES.map(cat => (
+          <button key={cat} onClick={() => setActiveTab(cat)}
+            className={`px-2.5 py-1 rounded-lg text-xs font-medium whitespace-nowrap transition-colors ${
+              activeTab === cat ? 'bg-green-600/80 text-white' : 'text-gray-400 hover:text-white bg-gray-800'
+            }`}>
+            {cat}
+          </button>
+        ))}
+      </div>
+
+      {/* Input */}
+      <div className="flex gap-2 mb-4">
+        <input
+          type="text" value={inputVal} placeholder="What went right today?"
+          onChange={e => setInputVal(e.target.value)}
+          onKeyDown={e => { if (e.key === 'Enter') addPositive(); }}
+          className="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-green-500"/>
+        <button onClick={addPositive}
+          className="flex items-center gap-1 px-3 py-2 bg-green-600 hover:bg-green-500 text-white text-sm font-medium rounded-lg transition-colors">
+          <Plus size={13}/> Add
+        </button>
+      </div>
+
+      {/* Cards */}
+      {shown.length === 0 ? (
+        <p className="text-sm text-gray-600 italic text-center py-3">Log a win — what went right today?</p>
+      ) : (
+        <div className="space-y-2">
+          {shown.map(p => (
+            <div key={p.id} className="flex items-start gap-3 p-3 bg-gray-800/60 rounded-xl border-l-2 border-green-500/60">
+              <div className="flex-1 min-w-0">
+                <p className="text-sm text-white leading-snug">{p.text}</p>
+                <div className="flex items-center gap-2 mt-1">
+                  <span className="text-[10px] px-1.5 py-0.5 bg-green-500/10 text-green-400 rounded">{p.category}</span>
+                  <span className="text-[10px] text-gray-600">{p.date}</span>
+                </div>
+              </div>
+              <div className="flex gap-1 flex-shrink-0">
+                <button onClick={() => archive(p.id)} className="p-1 text-gray-600 hover:text-yellow-400 transition-colors" title="Archive">
+                  <ChevronDown size={13}/>
+                </button>
+                <button onClick={() => remove(p.id)} className="p-1 text-gray-600 hover:text-red-400 transition-colors">
+                  <Trash2 size={13}/>
+                </button>
+              </div>
+            </div>
+          ))}
+          {active.length > 5 && (
+            <p className="text-xs text-gray-600 text-center">{active.length - 5} more — archive some to see them</p>
+          )}
+        </div>
+      )}
+    </Card>
+  );
+}
+
+// ── Struggles widget ──────────────────────────────────────────────────────────
+function StrugglesWidget() {
+  const t = today();
+  const [struggles, setStruggles] = useState(() => localGet(STR_KEY) || {});
+  const [input, setInput] = useState('');
+
+  const todayList = struggles[t] || [];
+
+  function save(updated) {
+    setStruggles(updated);
+    localSet(STR_KEY, updated);
+  }
+
+  function add() {
+    if (!input.trim()) return;
+    save({ ...struggles, [t]: [...todayList, { id: uuid(), text: input.trim() }] });
+    setInput('');
+  }
+
+  function remove(id) {
+    save({ ...struggles, [t]: todayList.filter(s => s.id !== id) });
+  }
+
+  return (
+    <Card className="border-red-500/10">
+      <CardTitle>Struggles</CardTitle>
+      <p className="text-xs text-gray-500 mb-3">What's challenging today</p>
+      <div className="flex gap-2 mb-3">
+        <input
+          type="text" value={input} placeholder="What's in your way?"
+          onChange={e => setInput(e.target.value)}
+          onKeyDown={e => { if (e.key === 'Enter') add(); }}
+          className="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-red-500"/>
+        <button onClick={add}
+          className="flex items-center gap-1 px-3 py-2 bg-red-700 hover:bg-red-600 text-white text-sm font-medium rounded-lg transition-colors">
+          <Plus size={13}/> Add
+        </button>
+      </div>
+      {todayList.length === 0 ? (
+        <p className="text-sm text-gray-600 italic text-center py-2">Nothing logged — good day so far!</p>
+      ) : (
+        <div className="space-y-1.5">
+          {todayList.map(s => (
+            <div key={s.id} className="flex items-center gap-2 p-2.5 bg-gray-800/60 rounded-lg border-l-2 border-red-500/40">
+              <span className="flex-1 text-sm text-white">{s.text}</span>
+              <button onClick={() => remove(s.id)} className="p-0.5 text-gray-600 hover:text-red-400"><Trash2 size={12}/></button>
+            </div>
+          ))}
+        </div>
+      )}
+    </Card>
+  );
+}
+
 // ── Main ──────────────────────────────────────────────────────────────────────
 export default function Dashboard() {
   const t = today();
@@ -185,6 +381,12 @@ export default function Dashboard() {
 
   function openQA(tab) { setQaTab(tab); setQaOpen(true); }
 
+  // Yesterday's score approximation from stored data
+  const yesterday = (() => {
+    const d = new Date(t + 'T00:00:00'); d.setDate(d.getDate() - 1);
+    return d.toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
+  })();
+
   // Health
   const waterData  = localGet('health_water') || {};
   const waterCups  = waterData[t] || 0;
@@ -193,6 +395,7 @@ export default function Dashboard() {
   const lastSleep  = [...sleepLogs].sort((a,b) => b.date.localeCompare(a.date))[0];
   const metrics    = localGet('health_metrics') || [];
   const lastWeight = [...metrics].sort((a,b) => b.date.localeCompare(a.date))[0];
+  const recovery   = computeRecoveryScore();
 
   // Finances
   const txns        = localGet('fin_transactions') || [];
@@ -209,12 +412,12 @@ export default function Dashboard() {
 
   // Appearance — stale slots (missing or >7 days old)
   const sevenAgo = new Date(); sevenAgo.setDate(sevenAgo.getDate()-7);
-  const staleSlots = ['face','physique','hair','style'].filter(key => {
+  const staleSlots = ['face','physique','style'].filter(key => {
     const photos = localGet(`appearance_slot_${key}`) || [];
     if (!photos.length) return true;
     const latest = [...photos].sort((a,b)=>b.date.localeCompare(a.date))[0];
     return new Date(latest.date+'T00:00:00') < sevenAgo;
-  }).map(k => ({ face:'Face', physique:'Physique', hair:'Hair', style:'Style' }[k]));
+  }).map(k => ({ face:'Face & Grooming', physique:'Physique', style:'Style' }[k]));
 
   // Goals
   const goals      = localGet('goals_list') || [];
@@ -259,26 +462,56 @@ export default function Dashboard() {
     Object.entries(groomLogs).filter(([,v])=>grooms.some(g=>v[g.id])).map(([d])=>d)
   );
 
+  // Style score + days since last outfit
+  const styleMemory  = localGet('appearance_style_memory') || [];
+  const styleScores  = styleMemory.slice(0, 10).filter(e => e.style_score != null).map(e => e.style_score);
+  const avgStyleScore = styleScores.length > 0
+    ? Math.round(styleScores.reduce((s, v) => s + v, 0) / styleScores.length)
+    : null;
+  const stylePhotos    = localGet('appearance_slot_style') || [];
+  const lastStylePhoto = stylePhotos.length > 0
+    ? [...stylePhotos].sort((a, b) => b.date.localeCompare(a.date))[0]
+    : null;
+  const daysSinceOutfit = lastStylePhoto
+    ? Math.floor((new Date(t + 'T00:00:00') - new Date(lastStylePhoto.date + 'T00:00:00')) / 86400000)
+    : null;
+
+  // Yesterday score — stored in score_history keyed by date
+  const scoreHistory = localGet('peak_score_history') || {};
+  const yesterdayScore = scoreHistory[yesterday] ?? null;
+  // Save today's score for future yesterday display
+  if (scoreHistory[t] !== score) {
+    localSet('peak_score_history', { ...scoreHistory, [t]: score });
+  }
+
   return (
     <div className="max-w-5xl mx-auto space-y-5">
       <MorningBrief />
 
-      {/* Daily Score */}
+      {/* Peak Score */}
       <Card className="bg-gradient-to-br from-indigo-900/40 to-gray-900">
-        <div className="flex items-center gap-2 mb-1">
-          <p className="text-xs text-gray-400 uppercase tracking-wider">Daily Score</p>
-          <button onClick={()=>setScoreOpen(true)} className="text-gray-600 hover:text-gray-300 transition-colors">
-            <HelpCircle size={14}/>
-          </button>
+        <div className="flex items-start gap-4">
+          <div className="flex-1">
+            <div className="flex items-center gap-2 mb-1">
+              <p className="text-xs text-gray-400 uppercase tracking-wider">Peak Score</p>
+              <button onClick={()=>setScoreOpen(true)} className="text-gray-600 hover:text-gray-300 transition-colors">
+                <HelpCircle size={14}/>
+              </button>
+            </div>
+            <p className={`text-6xl font-bold tabular-nums ${scoreColor}`}>{score}</p>
+            <p className="text-xs text-gray-500 mt-1">/ 100 · updates live</p>
+            {yesterdayScore !== null && (
+              <p className="text-xs text-gray-600 mt-1">Yesterday: <span className="text-gray-400">{yesterdayScore}</span></p>
+            )}
+            <ProgressBar value={score} max={100} color={score>=70?'green':score>=40?'yellow':'red'} className="mt-3"/>
+          </div>
+          <DashArcGauge score={score}/>
         </div>
-        <p className={`text-6xl font-bold tabular-nums ${scoreColor}`}>{score}</p>
-        <p className="text-xs text-gray-500 mt-2">/ 100 · updates live</p>
-        <ProgressBar value={score} max={100} color={score>=70?'green':score>=40?'yellow':'red'} className="mt-3"/>
-        <div className="mt-3 grid grid-cols-5 gap-1 text-center">
+        <div className="mt-3 grid grid-cols-4 sm:grid-cols-7 gap-1 text-center">
           {components.map(c=>(
             <div key={c.label}>
               <div className={`text-xs font-bold ${c.pts>=c.max?'text-green-400':'text-gray-500'}`}>{c.pts}/{c.max}</div>
-              <div className="text-xs text-gray-600 leading-tight">{c.label.split(' ')[0]}</div>
+              <div className="text-xs text-gray-600 leading-tight truncate">{c.label.split(' ')[0]}</div>
             </div>
           ))}
         </div>
@@ -306,9 +539,16 @@ export default function Dashboard() {
           badge={waterCups===0?'No water logged':null}
           actions={<ActionBtn label="+ Water" onClick={()=>openQA('Water')}/>}>
           <div className="space-y-1.5">
-            <StatRow label="Last sleep" value={lastSleep?`${lastSleep.hours}h`:'—'} sub={lastSleep?.date}/>
-            <StatRow label="Water today" value={`${waterCups}/${waterGoal}`} sub="cups" warn={waterCups===0?'yellow':undefined}/>
-            {lastWeight && <StatRow label="Weight" value={String(lastWeight.weight)} sub={lastWeight.unit}/>}
+            <div className="flex items-center justify-between">
+              <div className="space-y-1 flex-1">
+                <StatRow label="Last sleep" value={lastSleep?`${lastSleep.hours}h`:'—'} sub={lastSleep?.date}/>
+                <StatRow label="Water today" value={`${waterCups}/${waterGoal}`} sub="cups" warn={waterCups===0?'yellow':undefined}/>
+                {lastWeight && <StatRow label="Weight" value={String(lastWeight.weight)} sub={lastWeight.unit}/>}
+              </div>
+              <div className="ml-2 flex-shrink-0">
+                <ArcGaugeSVG pct={recovery} small/>
+              </div>
+            </div>
           </div>
         </SummaryCard>
 
@@ -330,6 +570,11 @@ export default function Dashboard() {
               : <p className="text-xs text-green-400">All photos up to date ✓</p>
             }
             <StatRow label="Grooming streak" value={`${groomStreak} days`}/>
+            {avgStyleScore != null && <StatRow label="Style score avg" value={`${avgStyleScore}/10`}/>}
+            {daysSinceOutfit === null || daysSinceOutfit > 7
+              ? <p className="text-xs text-amber-400">Upload an outfit photo for style feedback →</p>
+              : <StatRow label="Last outfit" value={`${daysSinceOutfit}d ago`}/>
+            }
           </div>
         </SummaryCard>
 
@@ -371,6 +616,12 @@ export default function Dashboard() {
         </SummaryCard>
       </div>
 
+      {/* Positives + Struggles */}
+      <div className="grid sm:grid-cols-2 gap-4">
+        <PositivesJournal />
+        <StrugglesWidget />
+      </div>
+
       {/* Quote — collapsible single line */}
       <div className="border-t border-gray-800 pt-3">
         <button onClick={()=>setQuoteOpen(v=>!v)}
@@ -383,7 +634,7 @@ export default function Dashboard() {
         )}
       </div>
 
-      <Modal open={scoreOpen} onClose={()=>setScoreOpen(false)} title="Daily Score Breakdown" size="sm">
+      <Modal open={scoreOpen} onClose={()=>setScoreOpen(false)} title="Peak Score Breakdown" size="sm">
         <ScoreBreakdown/>
       </Modal>
       <QuickAddModal open={qaOpen} onClose={()=>setQaOpen(false)} defaultTab={qaTab}/>

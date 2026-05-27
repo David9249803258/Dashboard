@@ -44,7 +44,7 @@ function FinanceModuleInner() {
         {tab === 'Net Worth'     && <NetWorth />}
         {tab === 'Balance Sheet' && <BalanceSheet />}
         {tab === 'Income'        && <Income />}
-        {tab === 'Forecast'      && <Forecast />}
+        {tab === 'Forecast'      && <Forecast onNavigateToIncome={() => setTab('Income')} />}
         {tab === 'Projects'      && <Projects />}
       </div>
     </div>

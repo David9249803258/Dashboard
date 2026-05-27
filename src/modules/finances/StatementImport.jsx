@@ -67,71 +67,75 @@ function fmtDateRange(start, end) {
   return start === end ? fmt(start) : `${fmt(start)} – ${fmt(end)}`;
 }
 
-const toBase64 = file => new Promise((resolve, reject) => {
+const fileToBase64 = (file) => new Promise((resolve, reject) => {
   const reader = new FileReader();
-  reader.onload  = () => resolve(reader.result.split(',')[1]);
+  reader.onload = () => {
+    const result = reader.result;
+    const base64 = result.split(',')[1];
+    resolve(base64);
+  };
   reader.onerror = reject;
   reader.readAsDataURL(file);
 });
 
-// ── Robust Claude PDF/Image prompt ───────────────────────────────────────────
-const EXTRACT_PROMPT = `You are an expert bank statement and financial document parser.
-The user has uploaded a financial document. Your job is to extract every single transaction or financial entry visible.
-
-Look for tables, lists, or any structured data showing:
-- Dates (in any format)
-- Amounts (positive or negative, with or without $ sign)
-- Descriptions, merchant names, or transaction details
-
-Return ONLY a raw JSON array. No markdown. No backticks. No explanation. Just the array:
-[
-  {
-    "date": "YYYY-MM-DD",
-    "amount": 0.00,
-    "merchant": "description here",
-    "type": "expense or income",
-    "category": "Food/Transport/Shopping/Entertainment/Health/Housing/Income/Subscriptions/Other"
-  }
-]
-
-Rules:
-- Debits, withdrawals, negative amounts = expense
-- Credits, deposits, positive amounts = income
-- If date format is unclear use your best judgment
-- If amount is unclear use your best judgment
-- Extract EVERY row you can see, do not skip any
-- Salary, payroll, direct deposit = Income category
-- If the document has multiple pages extract from all of them`;
+const IMAGE_PROMPT = `You are an expert bank statement parser. Extract every single transaction from this bank statement image. Return ONLY a raw JSON array, absolutely no markdown, no backticks, no explanation text, just the raw array starting with [ and ending with ]. Use this exact structure for each transaction: [{"date":"YYYY-MM-DD","amount":0.00,"merchant":"name","type":"expense","category":"Food"}]. Rules: all transactions are expenses unless the description says deposit, payroll, salary, credit, refund or transfer in - those are income. Categories must be one of: Food, Transport, Shopping, Entertainment, Health, Housing, Income, Subscriptions, Groceries, Personal, Gas, Other. Extract every row you can see.`;
 
 async function parseWithClaude(file, isPDF) {
   if (!API_KEY) throw new Error('Set VITE_ANTHROPIC_API_KEY in .env to enable AI statement parsing');
-  const base64   = await toBase64(file);
-  const mimeType = getMimeType(file);
+  const base64Data = await fileToBase64(file);
+  const mimeType   = getMimeType(file);
 
-  const content = isPDF
-    ? [
-        { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: base64 } },
-        { type: 'text', text: EXTRACT_PROMPT },
-      ]
-    : [
-        { type: 'image', source: { type: 'base64', media_type: mimeType, data: base64 } },
-        { type: 'text', text: EXTRACT_PROMPT },
-      ];
-
-  const response = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': API_KEY,
-      'anthropic-version': '2023-06-01',
-      'anthropic-dangerous-direct-browser-access': 'true',
-    },
-    body: JSON.stringify({
-      model: 'claude-sonnet-4-5',
-      max_tokens: 4000,
-      messages: [{ role: 'user', content }],
-    }),
-  });
+  let response;
+  if (isPDF) {
+    response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': API_KEY,
+        'anthropic-version': '2023-06-01',
+        'anthropic-beta': 'pdfs-2024-09-25',
+        'anthropic-dangerous-direct-browser-access': 'true',
+      },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-5',
+        max_tokens: 4000,
+        messages: [{
+          role: 'user',
+          content: [
+            {
+              type: 'document',
+              source: { type: 'base64', media_type: 'application/pdf', data: base64Data },
+            },
+            {
+              type: 'text',
+              text: 'Extract every single transaction from this bank statement. Return ONLY a raw JSON array, absolutely no markdown, no backticks, no explanation text, just the raw array starting with [ and ending with ]. Use this exact structure for each transaction: [{"date":"YYYY-MM-DD","amount":0.00,"merchant":"name","type":"expense","category":"Food"}]. Rules: all transactions are expenses unless the description says deposit, payroll, salary, credit, refund or transfer in - those are income. Categories must be one of: Food, Transport, Shopping, Entertainment, Health, Housing, Income, Subscriptions, Groceries, Personal, Gas, Other. Extract every row you can see.',
+            },
+          ],
+        }],
+      }),
+    });
+  } else {
+    response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': API_KEY,
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true',
+      },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-5',
+        max_tokens: 4000,
+        messages: [{
+          role: 'user',
+          content: [
+            { type: 'image', source: { type: 'base64', media_type: mimeType, data: base64Data } },
+            { type: 'text', text: IMAGE_PROMPT },
+          ],
+        }],
+      }),
+    });
+  }
 
   if (!response.ok) {
     const err = await response.json().catch(() => ({}));
@@ -139,7 +143,7 @@ async function parseWithClaude(file, isPDF) {
   }
 
   const data = await response.json();
-  const text = data.content?.[0]?.text || '';
+  const text = (data.content?.[0]?.text || '').trim();
 
   const jsonMatch = text.match(/\[[\s\S]*\]/);
   if (!jsonMatch) throw new Error('NO_TRANSACTIONS');
@@ -402,9 +406,9 @@ export default function StatementImport({ open, onClose, initialFile = null, sta
             <Image size={26} className="text-amber-400"/>
           </div>
           <div className="text-center space-y-2 max-w-sm">
-            <p className="text-base font-semibold text-white">No transactions could be read from this PDF.</p>
+            <p className="text-base font-semibold text-white">Claude could not extract transactions.</p>
             <p className="text-sm text-slate-400">
-              Try taking a clear screenshot of the transaction table and uploading as an image instead.
+              Please try uploading as an image screenshot instead.
             </p>
           </div>
           <div className="flex flex-col gap-2 w-full max-w-xs">

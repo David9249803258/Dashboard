@@ -1,12 +1,14 @@
 import { useState, useRef } from 'react';
-import { Upload, Trash2, ArrowLeftRight, Sparkles, Loader2, ChevronDown, ChevronUp } from 'lucide-react';
+import { Upload, Trash2, ArrowLeftRight, Sparkles, Loader2, ChevronDown, ChevronUp, TrendingUp } from 'lucide-react';
+import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import { useModuleData } from '../../lib/useModuleData';
 import { Card, CardTitle } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Modal } from '../../components/ui/Modal';
 import { EmptyState } from '../../components/ui/EmptyState';
-import { analyzeAppearancePhoto } from '../../services/claudeService';
-import { today, uuid } from '../../lib/utils';
+import { analyzeAppearancePhoto, extractStyleMemory } from '../../services/claudeService';
+import { saveStyleMemory, getLocalStyleMemory } from '../../services/styleMemoryService';
+import { today, uuid, fmtDate } from '../../lib/utils';
 
 const SLOTS = [
   {
@@ -16,11 +18,11 @@ const SLOTS = [
     instructions: [
       'Straight on, neutral expression',
       'Good natural lighting, no filters',
-      'Hair natural and visible',
+      'Hair natural and visible — style and shape will be analysed',
       'Face fully visible from forehead to chin',
       'No sunglasses or hats',
     ],
-    bestFor: 'skin analysis, haircut feedback, eyebrow grooming, jaw assessment, facial hair feedback',
+    bestFor: 'skin analysis, haircut feedback, hair style recommendations, eyebrow grooming, jaw assessment, facial hair feedback',
   },
   {
     key:          'physique',
@@ -36,19 +38,6 @@ const SLOTS = [
     bestFor: 'body composition feedback, posture analysis, frame assessment, muscle development suggestions',
   },
   {
-    key:          'hair',
-    label:        'Hair',
-    icon:         '💇',
-    instructions: [
-      'Hair in its natural state or styled as you normally wear it',
-      'Good lighting from above or in front',
-      'Both sides and top visible if possible',
-      'Clean, recently washed hair',
-      'No hat or hood',
-    ],
-    bestFor: 'haircut shape assessment, style recommendations for face shape, hair health and texture feedback',
-  },
-  {
     key:          'style',
     label:        'Style & Outfit',
     icon:         '👔',
@@ -62,6 +51,71 @@ const SLOTS = [
     bestFor: 'clothing fit assessment, color coordination, overall aesthetic, specific style upgrade recommendations',
   },
 ];
+
+// ── Style score trend card ────────────────────────────────────────────────────
+function StyleScoreTrend() {
+  const memory = getLocalStyleMemory(20);
+  const scored = [...memory].reverse().filter(e => typeof e.style_score === 'number');
+  if (scored.length < 2) return null;
+
+  const data = scored.map(e => ({ date: e.photo_date, score: e.style_score }));
+  const avg  = Math.round(scored.reduce((s, e) => s + e.style_score, 0) / scored.length);
+  const last = scored[scored.length - 1];
+  const prev = scored[scored.length - 2];
+  const trend = last.style_score > prev.style_score
+    ? 'improving'
+    : last.style_score < prev.style_score
+    ? 'needs focus'
+    : 'steady';
+  const trendColor = trend === 'improving' ? 'text-emerald-400' : trend === 'needs focus' ? 'text-red-400' : 'text-slate-400';
+  const mostRecent = memory[0];
+
+  return (
+    <Card className="border-teal-500/20 bg-teal-900/10">
+      <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center gap-2">
+          <TrendingUp size={14} className="text-teal-400"/>
+          <CardTitle className="mb-0 text-sm">Your Style Progress</CardTitle>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <span className="text-xs text-slate-400">Avg</span>
+          <span className="text-lg font-bold text-white">{avg}/10</span>
+        </div>
+      </div>
+
+      <div className="flex items-center gap-3 mb-2">
+        <span className={`text-xs font-medium ${trendColor}`}>Trend: {trend}</span>
+        <span className="text-[10px] text-slate-500">· {scored.length} outfit{scored.length !== 1 ? 's' : ''} analysed</span>
+      </div>
+
+      <ResponsiveContainer width="100%" height={72}>
+        <LineChart data={data} margin={{ top: 4, right: 4, bottom: 0, left: 0 }}>
+          <XAxis dataKey="date" hide />
+          <YAxis domain={[1, 10]} hide />
+          <Tooltip
+            contentStyle={{ background: '#0f172a', border: '1px solid #334155', borderRadius: 8, fontSize: 11 }}
+            formatter={v => [`${v}/10`, 'Style Score']}
+            labelFormatter={l => fmtDate(l)}
+          />
+          <Line
+            type="monotone"
+            dataKey="score"
+            stroke="#14b8a6"
+            strokeWidth={2}
+            dot={{ fill: '#14b8a6', r: 3 }}
+            activeDot={{ r: 5 }}
+          />
+        </LineChart>
+      </ResponsiveContainer>
+
+      {mostRecent?.what_to_improve && (
+        <p className="text-[10px] text-slate-500 mt-2">
+          Last feedback: <span className="text-slate-400">{mostRecent.what_to_improve}</span>
+        </p>
+      )}
+    </Card>
+  );
+}
 
 // ── Before/after comparison slider ───────────────────────────────────────────
 function CompareSlider({ photoA, photoB, onClose }) {
@@ -238,6 +292,13 @@ function PhotoSlot({ config, analyzingId, onAnalyze }) {
             </div>
           </div>
 
+          {/* Loading state */}
+          {analyzingId === latest.id && (
+            <p className="text-xs text-indigo-300 text-center py-2 animate-pulse">
+              Analysing your photo… this takes 10–15 seconds
+            </p>
+          )}
+
           {/* Inline analysis result */}
           {latest.analysis && (
             <div className="space-y-2">
@@ -316,16 +377,33 @@ function PhotoSlot({ config, analyzingId, onAnalyze }) {
 export default function PhotoTimeline() {
   const [analyzingId, setAnalyzingId] = useState(null);
 
-  async function handleAnalyze(photo, setPhotos, photoType) {
+  async function handleAnalyze(photo, setPhotos, slotKey, photoType) {
     setAnalyzingId(photo.id);
+    let analysisText = null;
     try {
+      const mediaType = photo.src.split(';')[0].split(':')[1] || 'image/jpeg';
       const base64 = photo.src.split(',')[1];
-      const result = await analyzeAppearancePhoto(base64, 'image/jpeg', photoType);
-      setPhotos(prev => prev.map(p => p.id === photo.id ? { ...p, analysis: result } : p));
-    } catch {
-      alert(import.meta.env.VITE_ANTHROPIC_API_KEY
-        ? 'Analysis failed — please try again'
-        : 'Set VITE_ANTHROPIC_API_KEY in .env to use AI analysis');
+      analysisText = await analyzeAppearancePhoto(base64, mediaType, photoType);
+      if (!analysisText) throw new Error('Empty response from Claude');
+      try {
+        setPhotos(prev => prev.map(p => p.id === photo.id ? { ...p, analysis: analysisText } : p));
+      } catch (saveErr) {
+        console.error('Could not save analysis result:', saveErr);
+      }
+      if (slotKey === 'style') {
+        const structured = await extractStyleMemory(analysisText);
+        await saveStyleMemory({
+          photo_date: photo.date,
+          raw_analysis: analysisText,
+          ...(structured || {}),
+        });
+      }
+    } catch (err) {
+      if (!analysisText) {
+        alert(import.meta.env.VITE_ANTHROPIC_API_KEY
+          ? 'Analysis failed — please try again'
+          : 'Set VITE_ANTHROPIC_API_KEY in .env to use AI analysis');
+      }
     } finally {
       setAnalyzingId(null);
     }
@@ -333,6 +411,8 @@ export default function PhotoTimeline() {
 
   return (
     <div className="space-y-4">
+      <StyleScoreTrend />
+
       <div className="p-3 bg-indigo-500/10 border border-indigo-500/30 rounded-xl text-xs text-indigo-300 flex items-start gap-2">
         <Sparkles size={13} className="flex-shrink-0 mt-0.5"/>
         <p>Upload a photo to each slot below, then tap <strong>Analyze</strong> for AI feedback tailored to that category. Follow the photo tips for the most accurate results.</p>
@@ -343,7 +423,7 @@ export default function PhotoTimeline() {
           key={slot.key}
           config={slot}
           analyzingId={analyzingId}
-          onAnalyze={(photo, setPhotos) => handleAnalyze(photo, setPhotos, slot.label)}
+          onAnalyze={(photo, setPhotos) => handleAnalyze(photo, setPhotos, slot.key, slot.label)}
         />
       ))}
     </div>

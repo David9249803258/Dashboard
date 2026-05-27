@@ -7,9 +7,10 @@ import { Input, Select } from '../../components/ui/Input';
 import { Badge } from '../../components/ui/Badge';
 import { EmptyState } from '../../components/ui/EmptyState';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
-import { today, uuid } from '../../lib/utils';
+import { today, uuid, getLast7Days } from '../../lib/utils';
 import { CHART_COLORS, WEEKDAYS } from '../../lib/constants';
 import { EXERCISE_LIBRARY, MUSCLE_GROUPS, CARDIO_TYPES } from './exerciseLibrary';
+import { supabase } from '../../services/supabase';
 
 // ── Today's Sets panel ────────────────────────────────────────────────────────
 function TodaysSets({ workouts, unit, onDelete }) {
@@ -41,6 +42,73 @@ function TodaysSets({ workouts, unit, onDelete }) {
 const liftEmpty   = () => ({ date: today(), exercise: '', sets: '', reps: '', weight: '' });
 const cardioEmpty = () => ({ date: today(), activity: 'Run', duration: '', distance: '', calories: '' });
 const ROUTINE_EMPTY = { name: '' };
+
+const STRAIN_LABELS = ['Rest','Rest','Light','Light','Moderate','Moderate','Hard','Hard','Max effort','Max effort','Max effort'];
+const STRAIN_COLORS = ['#6b7280','#6b7280','#22c55e','#22c55e','#eab308','#eab308','#f97316','#f97316','#ef4444','#ef4444','#ef4444'];
+
+function StrainLogger({ strainData, setStrainData }) {
+  const t = today();
+  const today_strain = strainData[t] || { level: 0, note: '' };
+  const [note, setNote] = useState(today_strain.note || '');
+  const last7 = getLast7Days();
+
+  function setLevel(level) {
+    const updated = { ...strainData, [t]: { ...today_strain, level } };
+    setStrainData(updated);
+    if (supabase) {
+      supabase.from('strain_logs').upsert([{ date: t, level, note: note || null }], { onConflict: 'date' }).catch(() => {});
+    }
+  }
+  function saveNote(val) {
+    const updated = { ...strainData, [t]: { ...today_strain, note: val } };
+    setStrainData(updated);
+  }
+
+  const level = today_strain.level || 0;
+  const barData = last7.map(d => ({ date: d.slice(5), level: strainData[d]?.level ?? null }));
+
+  return (
+    <Card>
+      <CardTitle>Log Today's Strain</CardTitle>
+      <p className="text-xs text-gray-500 mb-3">How hard did your body work today? (0–10)</p>
+
+      {/* Slider */}
+      <div className="mb-2">
+        <input
+          type="range" min={0} max={10} value={level}
+          onChange={e => setLevel(Number(e.target.value))}
+          className="w-full accent-indigo-500 h-2 cursor-pointer"/>
+        <div className="flex justify-between text-[10px] text-gray-600 mt-1 px-0.5">
+          <span>Rest</span><span>Light</span><span>Moderate</span><span>Hard</span><span>Max</span>
+        </div>
+      </div>
+
+      {/* Current level badge */}
+      <div className="flex items-center gap-2 mb-3">
+        <span className="text-2xl font-bold tabular-nums" style={{ color: STRAIN_COLORS[level] }}>{level}</span>
+        <span className="text-sm font-medium" style={{ color: STRAIN_COLORS[level] }}>{STRAIN_LABELS[level]}</span>
+      </div>
+
+      {/* Optional note */}
+      <input
+        type="text" value={note} placeholder="Optional note (e.g. heavy leg day)…"
+        onChange={e => setNote(e.target.value)}
+        onBlur={() => saveNote(note)}
+        className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-1.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-indigo-500 mb-3"/>
+
+      {/* 7-day history mini bars */}
+      <ResponsiveContainer width="100%" height={70}>
+        <BarChart data={barData}>
+          <XAxis dataKey="date" stroke="#6b7280" tick={{ fontSize: 9 }}/>
+          <YAxis domain={[0, 10]} hide/>
+          <Tooltip contentStyle={{ background: '#1f2937', border: '1px solid #374151', borderRadius: 8 }}
+            formatter={v => [v != null ? v : '—', 'Strain']}/>
+          <Bar dataKey="level" radius={[2, 2, 0, 0]} fill="#6366f1"/>
+        </BarChart>
+      </ResponsiveContainer>
+    </Card>
+  );
+}
 
 // ── Exercise search dropdown ──────────────────────────────────────────────────
 function ExerciseSearch({ value, onChange, customExercises }) {
@@ -162,6 +230,7 @@ export default function GymTracker({ unit }) {
   const [workouts,    setWorkouts]    = useModuleData('health_workouts', []);
   const [cardioLogs,  setCardioLogs]  = useModuleData('health_cardio',   []);
   const [customExs,   setCustomExs]   = useModuleData('health_custom_exercises', []);
+  const [strainData,  setStrainData]  = useModuleData('health_strain', {});
   const [liftForm,    setLiftForm]    = useState(liftEmpty);
   const [cardioForm,  setCardioForm]  = useState(cardioEmpty);
   const [liftErrors,  setLiftErrors]  = useState({});
@@ -310,6 +379,10 @@ export default function GymTracker({ unit }) {
       )}
 
       {subTab === 'Routines' && <Routines unit={unit} onStartRoutine={startRoutine}/>}
+
+      {(subTab === 'Strength' || subTab === 'Cardio') && (
+        <StrainLogger strainData={strainData} setStrainData={setStrainData}/>
+      )}
     </div>
   );
 }

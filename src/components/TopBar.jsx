@@ -8,50 +8,68 @@ import NotificationCenter from './NotificationCenter';
 import GlobalSearch from './GlobalSearch';
 import { Modal } from './ui/Modal';
 import { ProgressBar } from './ui/ProgressBar';
+import { computeRecoveryScore } from '../modules/health/RecoveryGauge';
 
 export function computeDailyScore() {
   const t = today();
+
+  // Water — 15 pts proportional
   const water     = localGet('health_water') || {};
   const waterVal  = water[t] || 0;
   const waterGoal = water.goal || 8;
-  const workouts  = localGet('health_workouts') || [];
-  const cardio    = localGet('health_cardio') || [];
-  const sleep     = localGet('health_sleep') || [];
-  const tasks     = localGet('productivity_tasks') || [];
-  const txns      = localGet('fin_transactions') || [];
-  const budgets   = localGet('fin_budgets') || [];
-  const nutrition = localGet('nutrition_logs') || [];
-  const nutSettings = localGet('nutrition_settings') || {};
+  const waterPts  = Math.min(15, Math.round((waterVal / waterGoal) * 15));
 
-  const waterPts   = Math.min(20, Math.round((waterVal / waterGoal) * 20));
-  const workoutPts = (workouts.some(w => w.date === t) || cardio.some(c => c.date === t)) ? 20 : 0;
-  const sleepPts   = sleep.some(s => s.date === t) ? 20 : 0;
+  // Calories — 15 pts (any logging = 10, within 10% of goal = 15)
+  const nutrition    = localGet('nutrition_logs') || [];
+  const nutSettings  = localGet('nutrition_settings') || {};
+  const todayNut     = nutrition.filter(n => n.date === t);
+  const calGoal      = nutSettings.calorieGoal || 0;
+  const calLogged    = todayNut.reduce((s, n) => s + (n.calories || 0), 0);
+  const calPts       = todayNut.length > 0
+    ? (calGoal > 0 && calLogged >= calGoal * 0.9 && calLogged <= calGoal * 1.1 ? 15 : 10)
+    : 0;
 
-  const todayTasks = tasks.filter(tk => tk.date === t || !tk.date);
-  const taskDone   = todayTasks.filter(tk => tk.done).length;
-  const taskPts    = todayTasks.length > 0 ? Math.min(20, Math.round((taskDone / todayTasks.length) * 20)) : 0;
+  // Supplements — 10 pts proportional
+  const sups     = localGet('health_supplements') || [];
+  const supLogs  = (localGet('health_sup_logs') || {})[t] || {};
+  const supTaken = sups.filter(s => supLogs[s.id]).length;
+  const supPts   = sups.length > 0 ? Math.round((supTaken / sups.length) * 10) : 0;
 
-  const month     = t.slice(0, 7);
-  const monthTxns = txns.filter(tx => tx.date?.startsWith(month) && tx.type !== 'income');
-  let budgetOK    = true;
-  budgets.forEach(b => {
-    const spent = monthTxns.filter(tx => tx.category === b.category).reduce((s, tx) => s + (tx.amount || 0), 0);
-    if (spent > b.monthly_limit) budgetOK = false;
-  });
-  const todayNutrition = nutrition.filter(n => n.date === t);
-  const calGoal   = nutSettings.calorieGoal || 0;
-  const calLogged = todayNutrition.reduce((s, n) => s + (n.calories || 0), 0);
-  const caloriesHit = calGoal > 0 && calLogged >= calGoal * 0.8 && calLogged <= calGoal * 1.2;
-  const budgetPts = (budgetOK || caloriesHit) ? 20 : 0;
+  // Sleep — 20 pts (proportional to 8h based on most recent log)
+  const sleepLogs   = localGet('health_sleep') || [];
+  const recentSleep = [...sleepLogs].sort((a, b) => b.date.localeCompare(a.date))[0];
+  const sleepH      = recentSleep?.hours || 0;
+  const sleepPts    = Math.min(20, Math.round((sleepH / 8) * 20));
+
+  // Recovery — 20 pts from recovery score
+  const recovery    = computeRecoveryScore();
+  const recoveryPts = Math.round((recovery / 100) * 20);
+
+  // Workout or rest day — 10 pts
+  const workouts   = localGet('health_workouts') || [];
+  const cardio     = localGet('health_cardio')   || [];
+  const restDays   = localGet('health_rest_days') || [];
+  const workoutPts = (workouts.some(w => w.date === t) || cardio.some(c => c.date === t) || restDays.includes(t)) ? 10 : 0;
+
+  // HRV above 7-day baseline — 10 pts
+  const hrvLogs   = (localGet('health_hrv_rhr') || []).filter(l => l.hrv_ms).sort((a, b) => b.date.localeCompare(a.date));
+  const todayHRV  = hrvLogs.find(l => l.date === t)?.hrv_ms || 0;
+  const baseHRV   = hrvLogs.filter(l => l.date !== t).slice(0, 7);
+  const avgHRV    = baseHRV.length ? baseHRV.reduce((s, l) => s + l.hrv_ms, 0) / baseHRV.length : 0;
+  const hrvPts    = avgHRV > 0 && todayHRV > 0 && todayHRV >= avgHRV ? 10 : 0;
+
+  const score = Math.min(100, waterPts + calPts + supPts + sleepPts + recoveryPts + workoutPts + hrvPts);
 
   return {
-    score: Math.min(100, waterPts + workoutPts + sleepPts + taskPts + budgetPts),
+    score,
     components: [
-      { label: 'Tasks completed',    pts: taskPts,    max: 20, detail: `${taskDone}/${todayTasks.length} tasks done` },
-      { label: 'Water goal hit',     pts: waterPts,   max: 20, detail: `${waterVal}/${waterGoal} cups` },
-      { label: 'Workout logged',     pts: workoutPts, max: 20, detail: workoutPts ? 'Logged today ✓' : 'None today' },
-      { label: 'Sleep logged',       pts: sleepPts,   max: 20, detail: sleepPts ? 'Logged last night ✓' : 'Not logged' },
-      { label: 'Budget / Nutrition', pts: budgetPts,  max: 20, detail: caloriesHit ? 'Calorie goal hit ✓' : budgetOK ? 'All categories on budget ✓' : 'Over budget in some categories' },
+      { label: 'Water',        pts: waterPts,    max: 15, detail: `${waterVal}/${waterGoal} cups` },
+      { label: 'Calories',     pts: calPts,      max: 15, detail: calGoal > 0 ? `${Math.round(calLogged)}/${calGoal} kcal` : `${todayNut.length} meals logged` },
+      { label: 'Supplements',  pts: supPts,      max: 10, detail: `${supTaken}/${sups.length} taken` },
+      { label: 'Sleep',        pts: sleepPts,    max: 20, detail: sleepH > 0 ? `${sleepH}h` : 'Not logged' },
+      { label: 'Recovery',     pts: recoveryPts, max: 20, detail: `${recovery}% recovery score` },
+      { label: 'Workout',      pts: workoutPts,  max: 10, detail: workoutPts ? 'Logged today ✓' : 'None logged' },
+      { label: 'HRV baseline', pts: hrvPts,      max: 10, detail: todayHRV > 0 ? `${todayHRV}ms${avgHRV > 0 ? ` (baseline ${Math.round(avgHRV)}ms)` : ''}` : 'Not logged' },
     ],
   };
 }

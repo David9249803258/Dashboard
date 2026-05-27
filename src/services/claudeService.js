@@ -1,6 +1,13 @@
 const API_KEY = import.meta.env.VITE_ANTHROPIC_API_KEY;
 const BASE    = 'https://api.anthropic.com/v1/messages';
 
+const HEADERS = () => ({
+  'Content-Type': 'application/json',
+  'x-api-key': API_KEY,
+  'anthropic-version': '2023-06-01',
+  'anthropic-dangerous-direct-browser-access': 'true',
+});
+
 async function callClaude({ systemPrompt, userContent, maxTokens = 1000 }) {
   if (!API_KEY) throw new Error('VITE_ANTHROPIC_API_KEY not set');
   const res = await fetch(BASE, {
@@ -91,15 +98,144 @@ TOP IMPROVEMENTS:
 Be direct, honest, and specific. Do not be vague. Do not sugarcoat. The user wants real feedback to improve.`;
 
 export async function analyzeAppearancePhoto(base64Image, mimeType = 'image/jpeg', photoType = '') {
+  if (!API_KEY) throw new Error('VITE_ANTHROPIC_API_KEY not set');
+
   const typeContext = photoType
     ? `\n\nThe user has submitted a ${photoType} photo. Focus your analysis primarily on the relevant areas for this photo type.`
     : '';
-  return callClaude({
-    systemPrompt: APPEARANCE_SYSTEM + typeContext,
-    userContent: [
-      { type: 'image', source: { type: 'base64', media_type: mimeType, data: base64Image } },
-      { type: 'text',  text: 'Please analyze this photo.' },
-    ],
-    maxTokens: 1500,
+
+  const response = await fetch(BASE, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': API_KEY,
+      'anthropic-version': '2023-06-01',
+      'anthropic-dangerous-direct-browser-access': 'true',
+    },
+    body: JSON.stringify({
+      model: 'claude-sonnet-4-5',
+      max_tokens: 1500,
+      messages: [{
+        role: 'user',
+        content: [
+          {
+            type: 'image',
+            source: { type: 'base64', media_type: mimeType, data: base64Image },
+          },
+          {
+            type: 'text',
+            text: APPEARANCE_SYSTEM + typeContext,
+          },
+        ],
+      }],
+    }),
   });
+
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}));
+    throw new Error(err.error?.message || `API error ${response.status}`);
+  }
+
+  const data = await response.json();
+  const analysisText = data.content?.[0]?.text || '';
+  if (!analysisText) throw new Error('Empty response from Claude');
+  return analysisText;
+}
+
+// ── Health patterns analysis ──────────────────────────────────────────────────
+export async function analyzeHealthPatterns({ sleepHistory, hrvHistory, rhrHistory, strainHistory, waterHistory }) {
+  const systemPrompt = `You are a personal health coach analyzing this user's logged data. Look for patterns and correlations.
+
+Their logged data for the last 30 days:
+Sleep hours per night: ${sleepHistory}
+HRV readings: ${hrvHistory}
+RHR readings: ${rhrHistory}
+Workout strain scores: ${strainHistory}
+Water intake per day: ${waterHistory}
+
+Identify 3-5 specific patterns you notice. Format each as:
+PATTERN: [one sentence describing what you noticed]
+INSIGHT: [one sentence explaining what it means for them]
+
+Only report patterns that have clear evidence in the data.
+If data is sparse say: Keep logging — patterns unlock after 2 weeks of consistent data.
+Be specific with numbers where possible.`;
+
+  return callClaude({
+    systemPrompt,
+    userContent: 'Analyze my health data and identify patterns.',
+    maxTokens: 600,
+  });
+}
+
+// ── Style memory extraction ───────────────────────────────────────────────────
+export async function extractStyleMemory(rawAnalysis) {
+  if (!API_KEY) return null;
+  try {
+    const response = await fetch(BASE, {
+      method: 'POST',
+      headers: HEADERS(),
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-5',
+        max_tokens: 500,
+        messages: [{
+          role: 'user',
+          content: `Extract key style information from this outfit analysis. Return ONLY valid JSON, no markdown, no explanation:
+{
+  "style_score": <number 1-10>,
+  "what_worked": "<brief summary of positives>",
+  "what_to_improve": "<brief summary of improvements needed>",
+  "specific_items": "<any specific clothing items mentioned>"
+}
+
+Analysis:
+${rawAnalysis}`,
+        }],
+      }),
+    });
+    if (!response.ok) return null;
+    const data = await response.json();
+    const text = data.content?.[0]?.text || '';
+    const match = text.match(/\{[\s\S]*\}/);
+    if (match) return JSON.parse(match[0]);
+  } catch {}
+  return null;
+}
+
+// ── Style coach chat ──────────────────────────────────────────────────────────
+export async function askStyleCoach(question, historyText) {
+  if (!API_KEY) throw new Error('VITE_ANTHROPIC_API_KEY not set');
+
+  const systemPrompt = historyText
+    ? `You are a personal style coach with full knowledge of this user's style history and past outfit feedback.
+
+Here is their complete style history from most recent to oldest:
+
+${historyText}
+
+Based on this history you know:
+- What styles, fits, and colors work for them
+- What they consistently need to improve
+- Their current style level and trajectory
+
+Use their history to give highly personalized recommendations that build on what works and avoid what doesn't. Be specific about actual clothing items, fits, and colors that would work for them personally based on their feedback history.`
+    : `You are a personal style coach. The user has not uploaded any outfit photos yet. Encourage them to upload outfit photos in the Appearance tab first so you can give personalized advice based on their actual style history.`;
+
+  const response = await fetch(BASE, {
+    method: 'POST',
+    headers: HEADERS(),
+    body: JSON.stringify({
+      model: 'claude-sonnet-4-5',
+      max_tokens: 1000,
+      system: systemPrompt,
+      messages: [{ role: 'user', content: question }],
+    }),
+  });
+
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}));
+    throw new Error(err.error?.message || `API error ${response.status}`);
+  }
+  const data = await response.json();
+  return data.content?.[0]?.text || '';
 }

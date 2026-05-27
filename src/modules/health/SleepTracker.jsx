@@ -5,11 +5,63 @@ import { Card, CardTitle } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Input, Textarea } from '../../components/ui/Input';
 import { EmptyState } from '../../components/ui/EmptyState';
-import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine, Scatter } from 'recharts';
-import { today, uuid, hoursFromTimes, sleepColor, getLast30Days } from '../../lib/utils';
+import { BarChart, Bar, Cell, LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine } from 'recharts';
+import { today, uuid, hoursFromTimes, sleepColor, getLast30Days, getLast7Days } from '../../lib/utils';
 import { CHART_COLORS } from '../../lib/constants';
 
 const QUALITY_COLORS = ['','text-red-400','text-orange-400','text-yellow-400','text-blue-400','text-green-400'];
+
+// ── Sleep Debt Card ───────────────────────────────────────────────────────────
+function SleepDebtCard({ logs }) {
+  const last7 = getLast7Days();
+  const byDate = Object.fromEntries(logs.map(l => [l.date, l]));
+
+  const barData = last7.map(d => ({
+    date: d.slice(5),
+    hours: byDate[d]?.hours ?? null,
+  }));
+
+  const debt = last7.reduce((acc, d) => {
+    const h = byDate[d]?.hours ?? 0;
+    return acc + (8 - h);
+  }, 0);
+
+  const debtRounded = +debt.toFixed(1);
+  const inDebt      = debtRounded > 0;
+  const label       = inDebt
+    ? `+${debtRounded}h in debt`
+    : `-${Math.abs(debtRounded)}h banked`;
+  const labelColor  = inDebt ? 'text-orange-400' : 'text-green-400';
+
+  const tip = debtRounded > 2
+    ? 'Prioritise an early night — sleep debt compounds.'
+    : debtRounded > 0
+    ? 'Nearly balanced — stay consistent.'
+    : 'Well rested — good position heading into the week.';
+
+  return (
+    <Card>
+      <CardTitle>Sleep Debt — Last 7 Days</CardTitle>
+      <p className={`text-3xl font-bold tabular-nums mb-1 ${labelColor}`}>{label}</p>
+      <p className="text-xs text-gray-500 mb-3 italic">{tip}</p>
+      <ResponsiveContainer width="100%" height={130}>
+        <BarChart data={barData}>
+          <XAxis dataKey="date" stroke="#6b7280" tick={{ fontSize: 10 }}/>
+          <YAxis stroke="#6b7280" tick={{ fontSize: 10 }} domain={[0, 10]}/>
+          <Tooltip contentStyle={{ background: '#1f2937', border: '1px solid #374151', borderRadius: 8 }}
+            formatter={v => [v != null ? `${v}h` : '—', 'Sleep']}/>
+          <ReferenceLine y={8} stroke="#22c55e" strokeDasharray="4 2"
+            label={{ value: '8h target', fill: '#22c55e', fontSize: 9, position: 'insideTopRight' }}/>
+          <Bar dataKey="hours" radius={[3, 3, 0, 0]}>
+            {barData.map((entry, i) => (
+              <Cell key={i} fill={(entry.hours ?? 0) >= 8 ? '#22c55e' : '#f97316'}/>
+            ))}
+          </Bar>
+        </BarChart>
+      </ResponsiveContainer>
+    </Card>
+  );
+}
 
 function StarRating({ value, onChange }) {
   return (
@@ -61,6 +113,8 @@ export default function SleepTracker() {
 
   return (
     <div className="space-y-4">
+      <SleepDebtCard logs={logs}/>
+
       <div className="flex items-center gap-2 px-3 py-2 bg-blue-500/10 border border-blue-500/20 rounded-xl text-xs text-blue-300">
         💡 <span>Tip: log sleep in the morning for the previous night — set the date to yesterday.</span>
       </div>

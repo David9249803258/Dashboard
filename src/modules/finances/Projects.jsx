@@ -1,11 +1,13 @@
 import { useState } from 'react';
-import { Plus, Trash2, Sparkles, Check, X, ChevronDown, ChevronUp, Loader2, Target } from 'lucide-react';
+import { Plus, Trash2, Sparkles, Check, X, ChevronDown, ChevronUp, Loader2, Target, ToggleLeft, ToggleRight, MessageSquare, Send } from 'lucide-react';
 import { useFinance, PROJECT_TYPES, PROJECT_STATUSES } from './FinanceContext';
 import { Card, CardTitle } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Input, Select, Textarea } from '../../components/ui/Input';
 import { ProgressBar } from '../../components/ui/ProgressBar';
 import { fmtCurrency, uuid, today } from '../../lib/utils';
+import { askStyleCoach } from '../../services/claudeService';
+import { getLocalStyleMemory, saveLocalStyleConversation, getLocalStyleConversations } from '../../services/styleMemoryService';
 
 const API_KEY = import.meta.env.VITE_ANTHROPIC_API_KEY;
 
@@ -21,6 +23,7 @@ const EMPTY_PROJECT = {
   name: '', type: 'Business', status: 'Idea', description: '',
   startupCost: '', monthlyRevenue: '', monthlyExpenses: '',
   targetLaunch: '', progress: 0, roadmap: null, milestones: [],
+  styleProject: false,
 };
 
 const EMPTY_MILESTONE = { text: '', dueDate: '', done: false };
@@ -116,6 +119,115 @@ function MilestoneTracker({ milestones, onChange }) {
   );
 }
 
+// ── Style project section ─────────────────────────────────────────────────────
+function StyleProjectSection({ project }) {
+  const styleMemory = getLocalStyleMemory(5);
+  const [conversations, setConversations] = useState(() => getLocalStyleConversations(project.id, 5));
+  const [question, setQuestion] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  async function handleAsk() {
+    if (!question.trim() || loading) return;
+    setLoading(true);
+    setError('');
+    try {
+      const history = getLocalStyleMemory(10);
+      const historyText = history.length > 0
+        ? history.map(e =>
+            `Date: ${e.photo_date}\nScore: ${e.style_score != null ? `${e.style_score}/10` : '—'}\nWhat worked: ${e.what_worked || '—'}\nNeeds improvement: ${e.what_to_improve || '—'}\nItems noted: ${e.specific_items || '—'}`
+          ).join('\n\n')
+        : '';
+      const answer = await askStyleCoach(question, historyText);
+      const conv = saveLocalStyleConversation(project.id, question, answer);
+      setConversations(prev => [conv, ...prev].slice(0, 5));
+      setQuestion('');
+    } catch (err) {
+      setError(err.message || 'Failed to get suggestions. Try again.');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div className="border-t border-slate-700/40 pt-4 space-y-4">
+      {/* Style History */}
+      <div>
+        <p className="text-xs font-medium text-teal-400 mb-2 flex items-center gap-1.5">
+          <span>👔</span> Style History
+        </p>
+        {styleMemory.length === 0 ? (
+          <p className="text-xs text-slate-500">
+            No outfit analyses yet. Upload a Style &amp; Outfit photo in the Appearance tab to start building your history.
+          </p>
+        ) : (
+          <div className="space-y-2">
+            {styleMemory.map((entry, i) => (
+              <div key={entry.id || i} className="bg-slate-800/40 rounded-xl p-2.5">
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-[10px] text-slate-500">{entry.photo_date}</span>
+                  {entry.style_score != null && (
+                    <span className={`text-xs font-bold ${entry.style_score >= 8 ? 'text-emerald-400' : entry.style_score >= 6 ? 'text-amber-400' : 'text-red-400'}`}>
+                      {entry.style_score}/10
+                    </span>
+                  )}
+                </div>
+                {entry.what_worked && (
+                  <p className="text-[10px] text-emerald-300/70 mb-0.5">+ {entry.what_worked}</p>
+                )}
+                {entry.what_to_improve && (
+                  <p className="text-[10px] text-amber-300/70">↑ {entry.what_to_improve}</p>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Outfit Suggestions Chat */}
+      <div>
+        <p className="text-xs font-medium text-slate-400 mb-2 flex items-center gap-1.5">
+          <MessageSquare size={11}/> Ask for Outfit Suggestions
+        </p>
+        <div className="flex gap-2">
+          <input
+            value={question}
+            onChange={e => setQuestion(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && handleAsk()}
+            placeholder="e.g. What should I wear to a business casual event?"
+            className="flex-1 bg-slate-800/60 border border-slate-700/40 rounded-xl px-3 py-2 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-teal-500/50"
+          />
+          <button
+            onClick={handleAsk}
+            disabled={loading || !question.trim()}
+            className="flex items-center gap-1.5 px-3 py-2 bg-teal-600 hover:bg-teal-500 disabled:opacity-50 rounded-xl text-xs text-white font-medium transition-colors flex-shrink-0">
+            {loading ? <Loader2 size={12} className="animate-spin"/> : <Send size={12}/>}
+            {loading ? 'Asking…' : 'Ask'}
+          </button>
+        </div>
+        {error && <p className="text-xs text-red-400 mt-1.5">{error}</p>}
+
+        {/* Conversation history */}
+        {conversations.length > 0 && (
+          <div className="mt-3 space-y-3">
+            {conversations.map((conv, i) => (
+              <div key={conv.id || i} className="space-y-1.5">
+                <div className="ml-auto w-fit max-w-[90%] bg-teal-600/20 border border-teal-500/20 rounded-xl rounded-tr-sm px-3 py-2">
+                  <p className="text-xs text-teal-200">{conv.question}</p>
+                </div>
+                <div className="w-fit max-w-[95%] bg-slate-800/60 border border-slate-700/30 rounded-xl rounded-tl-sm px-3 py-2">
+                  <p className="text-xs text-slate-300 whitespace-pre-wrap leading-relaxed">{conv.answer}</p>
+                  <p className="text-[10px] text-slate-600 mt-1.5">{new Date(conv.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ── Project card ──────────────────────────────────────────────────────────────
 function ProjectCard({ project, onUpdate, onRemove }) {
   const [expanded,    setExpanded]    = useState(false);
@@ -160,6 +272,10 @@ function ProjectCard({ project, onUpdate, onRemove }) {
     setEditMode(false);
   }
 
+  function toggleStyleProject() {
+    onUpdate({ ...project, styleProject: !project.styleProject });
+  }
+
   return (
     <Card>
       <div className="flex items-start justify-between gap-3 mb-3">
@@ -170,6 +286,11 @@ function ProjectCard({ project, onUpdate, onRemove }) {
               {project.status}
             </span>
             <span className="text-[10px] px-2 py-0.5 rounded-lg bg-slate-700/60 text-slate-400">{project.type}</span>
+            {project.styleProject && (
+              <span className="text-[10px] px-2 py-0.5 rounded-lg bg-teal-500/15 text-teal-400 flex items-center gap-1">
+                👔 Style
+              </span>
+            )}
           </div>
           {project.description && (
             <p className="text-xs text-slate-400 line-clamp-2">{project.description}</p>
@@ -246,6 +367,26 @@ function ProjectCard({ project, onUpdate, onRemove }) {
               <p className="text-xs text-slate-500">Get a business assessment and first steps from Claude AI.</p>
             )}
           </div>
+
+          {/* Style Memory toggle */}
+          <div className="flex items-center justify-between py-1">
+            <div>
+              <p className="text-xs font-medium text-slate-300">Style Memory</p>
+              <p className="text-[10px] text-slate-600">Link outfit feedback from the Appearance module</p>
+            </div>
+            <button
+              onClick={toggleStyleProject}
+              className="flex items-center gap-1.5 text-xs transition-colors"
+            >
+              {project.styleProject
+                ? <ToggleRight size={24} className="text-teal-400"/>
+                : <ToggleLeft size={24} className="text-slate-600"/>
+              }
+            </button>
+          </div>
+
+          {/* Style project section */}
+          {project.styleProject && <StyleProjectSection project={project} />}
 
           {/* Edit fields */}
           {editMode ? (

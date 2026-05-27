@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Routes, Route, useLocation, NavLink } from 'react-router-dom';
 import { LayoutDashboard, Heart, DollarSign, Target, UtensilsCrossed, Zap, Sparkles, MoreHorizontal, Settings as SettingsIcon } from 'lucide-react';
 import { Sidebar } from './components/Sidebar';
@@ -58,10 +58,36 @@ function MobileBottomNav({ onMoreClick }) {
 // ── Main App ──────────────────────────────────────────────────────────────────
 export default function App() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [updateAvailable, setUpdateAvailable] = useState(false);
   const { pathname } = useLocation();
+
+  useEffect(() => {
+    if (!('serviceWorker' in navigator)) return;
+    navigator.serviceWorker.ready.then(registration => {
+      registration.addEventListener('updatefound', () => {
+        const newWorker = registration.installing;
+        newWorker?.addEventListener('statechange', () => {
+          if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+            setUpdateAvailable(true);
+          }
+        });
+      });
+    });
+  }, []);
 
   return (
     <div className="min-h-screen bg-slate-950">
+      {updateAvailable && (
+        <div className="fixed top-14 left-0 right-0 z-50 flex items-center justify-between gap-3 px-4 py-2.5 bg-indigo-600/95 backdrop-blur-sm border-b border-indigo-500/50">
+          <span className="text-sm text-white font-medium">Dashboard updated — tap to reload</span>
+          <button
+            onClick={() => window.location.reload()}
+            className="px-3 py-1 bg-white/20 hover:bg-white/30 text-white text-sm font-medium rounded-lg transition-colors flex-shrink-0"
+          >
+            Reload
+          </button>
+        </div>
+      )}
       <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
       <TopBar onMenuClick={() => setSidebarOpen(true)} />
 
