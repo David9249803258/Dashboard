@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import { FinanceProvider } from './FinanceContext';
 import NetWorth from './NetWorth';
 import BalanceSheet from './BalanceSheet';
 import Income from './Income';
@@ -52,9 +51,5 @@ function FinanceModuleInner() {
 }
 
 export default function FinancesModule() {
-  return (
-    <FinanceProvider>
-      <FinanceModuleInner />
-    </FinanceProvider>
-  );
+  return <FinanceModuleInner />;
 }

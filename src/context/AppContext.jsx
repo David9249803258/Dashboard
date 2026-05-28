@@ -1,5 +1,5 @@
 import { createContext, useContext, useReducer, useEffect, useCallback } from 'react';
-import { localGet, localSet, getData, setData } from '../lib/storage';
+import { localGet, localSet, getData, setData, syncLocalToSupabase } from '../lib/storage';
 import { today } from '../lib/utils';
 
 const Ctx = createContext(null);
@@ -32,9 +32,20 @@ export function AppProvider({ children }) {
     return saved ? { ...init, ...saved } : init;
   });
 
-  // Persist state on change
+  // On startup: run the one-time localStorage→Supabase migration,
+  // then hydrate app_state from Supabase to get cross-device settings.
+  useEffect(() => {
+    syncLocalToSupabase();
+
+    getData('app_state', null).then(remote => {
+      if (remote) dispatch({ type: 'LOAD_ALL', data: remote });
+    }).catch(() => {});
+  }, []);
+
+  // Persist state on change — both localStorage (cache) and Supabase
   useEffect(() => {
     localSet('app_state', state);
+    setData('app_state', state).catch(() => {});
     // Apply theme
     document.documentElement.classList.toggle('dark', state.theme === 'dark');
   }, [state]);

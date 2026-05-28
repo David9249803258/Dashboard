@@ -4,6 +4,7 @@ import { Button } from './ui/Button';
 import { Input, Select, Textarea } from './ui/Input';
 import { localGet, localSet } from '../lib/storage';
 import { today, uuid } from '../lib/utils';
+import { useWater } from '../context/WaterContext';
 
 const TABS = ['Task','Water','Meal','Workout','Expense','Mood'];
 
@@ -13,6 +14,7 @@ const EXP_CATS = ['Housing','Food','Transport','Entertainment','Health','Shoppin
 const MEAL_TYPES = ['Breakfast','Lunch','Dinner','Snacks'];
 
 export function QuickAddModal({ open, onClose, defaultTab = 'Task' }) {
+  const { addCup } = useWater();
   const [tab,   setTab]   = useState(defaultTab);
   const [vals,  setVals]  = useState({});
   const [saved, setSaved] = useState(false);
@@ -30,9 +32,7 @@ export function QuickAddModal({ open, onClose, defaultTab = 'Task' }) {
       tasks.unshift({ id: uuid(), text: vals.text, priority: vals.priority || 'Medium', done: false, date: t, subtasks: [] });
       localSet('productivity_tasks', tasks);
     } else if (tab === 'Water') {
-      const water = localGet('health_water') || {};
-      water[t] = (water[t] || 0) + (Number(vals.cups) || 1);
-      localSet('health_water', water);
+      addCup(Number(vals.cups) || 1);
     } else if (tab === 'Meal') {
       if (!vals.name?.trim() || !vals.calories) return;
       const logs = localGet('nutrition_logs') || [];

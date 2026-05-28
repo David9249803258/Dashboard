@@ -7,6 +7,9 @@ import { Modal } from '../components/ui/Modal';
 import { QuickAddModal } from '../components/QuickAddModal';
 import { localGet, localSet } from '../lib/storage';
 import { today, fmtCurrency, calcStreak, uuid } from '../lib/utils';
+import { useFinance } from '../modules/finances/FinanceContext';
+import { useWater } from '../context/WaterContext';
+import EnergyTimeline from '../components/EnergyTimeline';
 import { getDailyQuote } from '../lib/constants';
 import { computeDailyScore } from '../components/TopBar';
 import { ArcGaugeSVG, computeRecoveryScore } from '../modules/health/RecoveryGauge';
@@ -96,9 +99,7 @@ function MorningBrief() {
   const bills     = localGet('fin_bills') || [];
   const in7       = new Date(); in7.setDate(in7.getDate() + 7);
   const billsDue  = bills.filter(b => !b.paid && b.due_date && new Date(b.due_date+'T00:00:00') <= in7);
-  const water     = localGet('health_water') || {};
-  const cups      = water[t] || 0;
-  const goal      = water.goal || 8;
+  const { cups, goal } = useWater();
   const streak    = calcStreak(localGet('activity_dates') || []);
   const visionBoard = (localGet('goals_vision_board') || []).filter(i => i.pinned);
 
@@ -388,9 +389,7 @@ export default function Dashboard() {
   })();
 
   // Health
-  const waterData  = localGet('health_water') || {};
-  const waterCups  = waterData[t] || 0;
-  const waterGoal  = waterData.goal || 8;
+  const { cups: waterCups, goal: waterGoal } = useWater();
   const sleepLogs  = localGet('health_sleep') || [];
   const lastSleep  = [...sleepLogs].sort((a,b) => b.date.localeCompare(a.date))[0];
   const metrics    = localGet('health_metrics') || [];
@@ -404,8 +403,9 @@ export default function Dashboard() {
   const monthTxns   = txns.filter(tx => tx.date?.startsWith(month));
   const income      = monthTxns.filter(tx => tx.type==='income').reduce((s,tx)=>s+tx.amount,0);
   const expenses    = monthTxns.filter(tx => tx.type!=='income').reduce((s,tx)=>s+tx.amount,0);
-  const nwSnaps     = localGet('fin_nw_snapshots') || [];
-  const latestNW    = nwSnaps[nwSnaps.length-1]?.net_worth ?? null;
+  const { netWorth, snapshots } = useFinance();
+  const prevNWSnap  = [...snapshots].filter(s => s.date && !s.date.startsWith(t.slice(0,7))).sort((a,b)=>b.date.localeCompare(a.date))[0] || null;
+  const nwMoMChange = prevNWSnap != null ? netWorth - prevNWSnap.net_worth : null;
   const totalBudget = budgets.reduce((s,b)=>s+(b.monthly_limit||0),0);
   const budgetPct   = totalBudget > 0 ? Math.min(100, Math.round((expenses/totalBudget)*100)) : null;
   const budgetWarn  = budgetPct != null && budgetPct >= 80;
@@ -557,7 +557,13 @@ export default function Dashboard() {
           <div className="space-y-1.5">
             <StatRow label="Income this month" value={fmtCurrency(income)}/>
             <StatRow label="Expenses" value={fmtCurrency(expenses)} warn={budgetWarn?'red':undefined}/>
-            {latestNW!=null && <StatRow label="Net worth" value={fmtCurrency(latestNW)}/>}
+            <div className="flex items-baseline justify-between">
+              <span className="text-xs text-gray-500">Net worth</span>
+              <div className="flex items-baseline gap-1.5">
+                <span className={`text-sm font-semibold tabular-nums ${netWorth < 0 ? 'text-red-400' : 'text-green-400'}`}>{fmtCurrency(netWorth)}</span>
+                {nwMoMChange !== null && <span className={`text-[11px] font-medium ${nwMoMChange >= 0 ? 'text-green-400' : 'text-red-400'}`}>{nwMoMChange >= 0 ? '↑' : '↓'} {fmtCurrency(Math.abs(nwMoMChange))}</span>}
+              </div>
+            </div>
             {budgetPct!=null && <ProgressBar value={budgetPct} max={100} color={budgetPct>100?'red':budgetPct>80?'yellow':'green'} className="mt-1"/>}
           </div>
         </SummaryCard>
@@ -615,6 +621,8 @@ export default function Dashboard() {
           </div>
         </SummaryCard>
       </div>
+
+      <EnergyTimeline />
 
       {/* Positives + Struggles */}
       <div className="grid sm:grid-cols-2 gap-4">

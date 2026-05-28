@@ -1,11 +1,11 @@
 import { useState, useEffect, useRef } from 'react';
 import { Plus, Minus, Settings2 } from 'lucide-react';
-import { useModuleData } from '../../lib/useModuleData';
+import { useWater } from '../../context/WaterContext';
 import { Card, CardTitle } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine } from 'recharts';
-import { today, getLast7Days } from '../../lib/utils';
+import { getLast7Days } from '../../lib/utils';
 import { CHART_COLORS } from '../../lib/constants';
 
 // ── Animated glass ────────────────────────────────────────────────────────────
@@ -44,17 +44,13 @@ function WaterGlass({ cups, goal }) {
 }
 
 export default function WaterTracker() {
-  const [data, setData] = useModuleData('health_water', { goal: 8 });
+  const { cups, goal, data, addCup, setGoal } = useWater();
   const [customAdd, setCustomAdd] = useState('');
   const [editGoal, setEditGoal]   = useState(false);
   const [goalInput, setGoalInput] = useState('');
 
-  const t    = today();
-  const cups = data[t] || 0;
-  const goal = data.goal || 8;
-
-  function add(n) { setData(prev => ({ ...prev, [t]: Math.max(0, (prev[t]||0)+n) })); }
-  function saveGoal() { const g=Number(goalInput); if (g>0) setData(prev=>({...prev,goal:g})); setEditGoal(false); }
+  function add(n) { addCup(n); }
+  function saveGoal() { const g=Number(goalInput); if (g>0) setGoal(g); setEditGoal(false); }
 
   const last7 = getLast7Days().map(d => ({ date: d.slice(5), cups: data[d]||0 }));
 
