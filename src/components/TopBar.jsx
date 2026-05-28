@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
-import { Menu, Plus, Flame, HelpCircle } from 'lucide-react';
+import { Menu, Plus, Flame, HelpCircle, RefreshCw } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { calcStreak, today } from '../lib/utils';
-import { localGet } from '../lib/storage';
+import { localGet, onSyncStatus, forceSync } from '../lib/storage';
 import { QuickAddModal } from './QuickAddModal';
 import NotificationCenter from './NotificationCenter';
 import GlobalSearch from './GlobalSearch';
@@ -114,6 +114,59 @@ function LiveClock() {
   );
 }
 
+function SyncIndicator() {
+  const [status,   setStatus]   = useState('synced');
+  const [retrying, setRetrying] = useState(false);
+
+  useEffect(() => onSyncStatus(setStatus), []);
+
+  // Auto-clear error after 8 seconds so it doesn't stay stuck
+  useEffect(() => {
+    if (status !== 'error') return;
+    const id = setTimeout(() => setStatus('synced'), 8000);
+    return () => clearTimeout(id);
+  }, [status]);
+
+  async function handleRetry() {
+    setRetrying(true);
+    await forceSync();
+    setRetrying(false);
+  }
+
+  if (status === 'synced') {
+    return (
+      <span className="hidden sm:flex items-center gap-1 text-[10px] text-emerald-500" title="All data saved">
+        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+        Synced
+      </span>
+    );
+  }
+  if (status === 'saving') {
+    return (
+      <span className="flex items-center gap-1 text-[10px] text-amber-400 animate-pulse">
+        <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+        Saving…
+      </span>
+    );
+  }
+  return (
+    <span className="flex items-center gap-1.5">
+      <span className="flex items-center gap-1 text-[10px] text-red-400">
+        <span className="w-1.5 h-1.5 rounded-full bg-red-400" />
+        Sync failed
+      </span>
+      <button
+        onClick={handleRetry}
+        disabled={retrying}
+        className="p-0.5 text-red-400 hover:text-red-300 disabled:opacity-50 transition-colors"
+        title="Retry sync"
+      >
+        <RefreshCw size={10} className={retrying ? 'animate-spin' : ''} />
+      </button>
+    </span>
+  );
+}
+
 export function TopBar({ onMenuClick }) {
   const { state }     = useApp();
   const { score }     = computeDailyScore();
@@ -131,6 +184,8 @@ export function TopBar({ onMenuClick }) {
 
         <LiveClock />
         <div className="flex-1" />
+
+        <SyncIndicator />
 
         <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-slate-800/80 border border-slate-700/40">
           <Flame size={13} className="text-orange-400" />
