@@ -1,8 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
-import { Upload, CheckCircle, Loader2, AlertCircle, Trash2, History, Image } from 'lucide-react';
+import { Upload, CheckCircle, Loader2, AlertCircle, Trash2, History, Image, AlertTriangle } from 'lucide-react';
 import { Modal } from '../../components/ui/Modal';
 import { Button } from '../../components/ui/Button';
-import { Select } from '../../components/ui/Input';
 import { useFinance, EXPENSE_CATEGORIES, INCOME_CATEGORIES } from './FinanceContext';
 import { uuid, today } from '../../lib/utils';
 import { localGet, localSet } from '../../lib/storage';
@@ -49,16 +48,30 @@ function isDuplicate(txn, existingTxns) {
   );
 }
 
-function recordImport({ fileName, fileType, rows, importedCount }) {
+function recordImport({ importId, fileName, fileType, rows, importedCount, duplicatesSkipped }) {
   const dates = rows.map(r => r.date).filter(Boolean).sort();
   const entry = {
-    id: uuid(), fileName, fileType,
+    id: importId,
+    fileName, fileType,
     dateRangeStart: dates[0] || '',
     dateRangeEnd:   dates[dates.length - 1] || '',
     transactionsImported: importedCount,
+    duplicatesSkipped: duplicatesSkipped || 0,
     importedAt: new Date().toISOString(),
   };
   localSet('fin_import_history', [entry, ...(localGet('fin_import_history') || [])]);
+}
+
+function checkOverlap(newStart, newEnd) {
+  const history = localGet('fin_import_history') || [];
+  return history.filter(imp => {
+    if (!imp.dateRangeStart || !imp.dateRangeEnd) return false;
+    const impStart = new Date(imp.dateRangeStart + 'T00:00:00');
+    const impEnd   = new Date(imp.dateRangeEnd   + 'T00:00:00');
+    const nStart   = new Date(newStart + 'T00:00:00');
+    const nEnd     = new Date(newEnd   + 'T00:00:00');
+    return nStart <= impEnd && nEnd >= impStart;
+  });
 }
 
 function fmtDateRange(start, end) {
@@ -69,11 +82,7 @@ function fmtDateRange(start, end) {
 
 const fileToBase64 = (file) => new Promise((resolve, reject) => {
   const reader = new FileReader();
-  reader.onload = () => {
-    const result = reader.result;
-    const base64 = result.split(',')[1];
-    resolve(base64);
-  };
+  reader.onload = () => { resolve(reader.result.split(',')[1]); };
   reader.onerror = reject;
   reader.readAsDataURL(file);
 });
@@ -102,14 +111,8 @@ async function parseWithClaude(file, isPDF) {
         messages: [{
           role: 'user',
           content: [
-            {
-              type: 'document',
-              source: { type: 'base64', media_type: 'application/pdf', data: base64Data },
-            },
-            {
-              type: 'text',
-              text: 'Extract every single transaction from this bank statement. Return ONLY a raw JSON array, absolutely no markdown, no backticks, no explanation text, just the raw array starting with [ and ending with ]. Use this exact structure for each transaction: [{"date":"YYYY-MM-DD","amount":0.00,"merchant":"name","type":"expense","category":"Food"}]. Rules: all transactions are expenses unless the description says deposit, payroll, salary, credit, refund or transfer in - those are income. Categories must be one of: Food, Transport, Shopping, Entertainment, Health, Housing, Income, Subscriptions, Groceries, Personal, Gas, Other. Extract every row you can see.',
-            },
+            { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: base64Data } },
+            { type: 'text', text: 'Extract every single transaction from this bank statement. Return ONLY a raw JSON array, absolutely no markdown, no backticks, no explanation text, just the raw array starting with [ and ending with ]. Use this exact structure for each transaction: [{"date":"YYYY-MM-DD","amount":0.00,"merchant":"name","type":"expense","category":"Food"}]. Rules: all transactions are expenses unless the description says deposit, payroll, salary, credit, refund or transfer in - those are income. Categories must be one of: Food, Transport, Shopping, Entertainment, Health, Housing, Income, Subscriptions, Groceries, Personal, Gas, Other. Extract every row you can see.' },
           ],
         }],
       }),
@@ -144,10 +147,8 @@ async function parseWithClaude(file, isPDF) {
 
   const data = await response.json();
   const text = (data.content?.[0]?.text || '').trim();
-
   const jsonMatch = text.match(/\[[\s\S]*\]/);
   if (!jsonMatch) throw new Error('NO_TRANSACTIONS');
-
   let parsed;
   try { parsed = JSON.parse(jsonMatch[0]); } catch { throw new Error('NO_TRANSACTIONS'); }
   if (!Array.isArray(parsed) || parsed.length === 0) throw new Error('NO_TRANSACTIONS');
@@ -155,29 +156,151 @@ async function parseWithClaude(file, isPDF) {
 }
 
 // ── Import History ─────────────────────────────────────────────────────────────
-function ImportHistory({ onClose }) {
-  const history = localGet('fin_import_history') || [];
+function ImportHistory({ onClose, transactions, setTransactions }) {
+  const [history,    setHistory]    = useState(() => localGet('fin_import_history') || []);
+  const [confirmId,  setConfirmId]  = useState(null);
+  const [confirmAll, setConfirmAll] = useState(false);
+  const [toast,      setToast]      = useState('');
+
+  function showToast(msg) {
+    setToast(msg);
+    setTimeout(() => setToast(''), 4000);
+  }
+
+  function deleteImport(entry) {
+    const count = transactions.filter(t => t.import_id === entry.id).length;
+    setTransactions(prev => prev.filter(t => t.import_id !== entry.id));
+    const next = history.filter(h => h.id !== entry.id);
+    localSet('fin_import_history', next);
+    setHistory(next);
+    setConfirmId(null);
+    showToast(`Import deleted — ${count} transaction${count !== 1 ? 's' : ''} removed`);
+  }
+
+  function deleteAllImports() {
+    const importIds = new Set(history.map(h => h.id));
+    const count = transactions.filter(t => t.import_id && importIds.has(t.import_id)).length;
+    setTransactions(prev => prev.filter(t => !t.import_id || !importIds.has(t.import_id)));
+    localSet('fin_import_history', []);
+    setHistory([]);
+    setConfirmAll(false);
+    showToast(`All imports deleted — ${count} transaction${count !== 1 ? 's' : ''} removed`);
+  }
+
+  const allDates     = history.flatMap(h => [h.dateRangeStart, h.dateRangeEnd]).filter(Boolean).sort();
+  const overallStart = allDates[0];
+  const overallEnd   = allDates[allDates.length - 1];
+  const totalImported = history.reduce((s, h) => s + (h.transactionsImported || 0), 0);
+
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
         <p className="text-sm font-semibold text-white">Import History</p>
         <Button size="sm" variant="secondary" onClick={onClose}>← Back</Button>
       </div>
+
+      {toast && (
+        <div className="flex items-center gap-2 px-3 py-2 bg-emerald-500/15 border border-emerald-500/20 rounded-xl text-xs text-emerald-400">
+          <CheckCircle size={12} className="flex-shrink-0" /> {toast}
+        </div>
+      )}
+
       {history.length === 0 ? (
         <p className="text-sm text-slate-500 text-center py-6">No imports yet</p>
       ) : (
-        <div className="space-y-2 max-h-96 overflow-y-auto">
-          {history.map(h => (
-            <div key={h.id} className="p-3 bg-slate-800/60 rounded-2xl text-xs">
-              <div className="flex items-start justify-between gap-2 mb-1">
-                <p className="text-white font-medium truncate">{h.fileName}</p>
-                <span className="text-slate-500 flex-shrink-0">{new Date(h.importedAt).toLocaleDateString()}</span>
+        <>
+          {/* Summary */}
+          <div className="px-3 py-2.5 bg-slate-800/60 rounded-xl text-xs text-slate-400">
+            <span className="text-white font-medium">{totalImported}</span> transaction{totalImported !== 1 ? 's' : ''} imported across{' '}
+            <span className="text-white font-medium">{history.length}</span> import{history.length !== 1 ? 's' : ''}
+            {overallStart && (
+              <> covering <span className="text-sky-300">{fmtDateRange(overallStart, overallEnd)}</span></>
+            )}
+          </div>
+
+          <div className="space-y-2 max-h-80 overflow-y-auto pr-0.5">
+            {history.map(h => (
+              <div key={h.id} className="p-3 bg-slate-800/60 rounded-2xl text-xs">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-white font-medium truncate">{h.fileName}</p>
+                    <p className="text-slate-400 mt-0.5">{fmtDateRange(h.dateRangeStart, h.dateRangeEnd)}</p>
+                    <div className="flex items-center gap-3 mt-1 flex-wrap">
+                      <span className="text-emerald-400">{h.transactionsImported} imported</span>
+                      {(h.duplicatesSkipped || 0) > 0 && (
+                        <span className="text-amber-400">{h.duplicatesSkipped} dup{h.duplicatesSkipped !== 1 ? 's' : ''} skipped</span>
+                      )}
+                      <span className="text-slate-500">{new Date(h.importedAt).toLocaleDateString()}</span>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setConfirmId(prev => prev === h.id ? null : h.id)}
+                    className="p-1.5 text-slate-600 hover:text-red-400 transition-colors rounded-xl hover:bg-red-500/10 flex-shrink-0"
+                    title="Delete import"
+                  >
+                    <Trash2 size={13} />
+                  </button>
+                </div>
+
+                {confirmId === h.id && (
+                  <div className="mt-3 pt-3 border-t border-slate-700/50">
+                    <p className="text-slate-300 mb-2 leading-relaxed">
+                      Delete this import? This will also remove all{' '}
+                      <span className="text-white font-semibold">
+                        {transactions.filter(t => t.import_id === h.id).length}
+                      </span>{' '}
+                      transactions from this import. This cannot be undone.
+                    </p>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => deleteImport(h)}
+                        className="px-3 py-1.5 bg-red-500/20 hover:bg-red-500/30 text-red-400 text-xs rounded-xl border border-red-500/20 transition-colors font-medium"
+                      >
+                        Yes, delete import
+                      </button>
+                      <button
+                        onClick={() => setConfirmId(null)}
+                        className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-slate-300 text-xs rounded-xl transition-colors"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
-              <p className="text-slate-400">{fmtDateRange(h.dateRangeStart, h.dateRangeEnd)}</p>
-              <p className="text-emerald-400 mt-1">{h.transactionsImported} imported</p>
+            ))}
+          </div>
+
+          {/* Delete All */}
+          {!confirmAll ? (
+            <button
+              onClick={() => setConfirmAll(true)}
+              className="w-full text-center text-xs text-slate-600 hover:text-red-400 transition-colors py-1.5"
+            >
+              Delete All Imports
+            </button>
+          ) : (
+            <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-xl space-y-2">
+              <p className="text-xs text-red-300 font-medium leading-relaxed">
+                This will delete ALL imported transactions and cannot be undone. Manually entered transactions will not be affected.
+              </p>
+              <div className="flex gap-2">
+                <button
+                  onClick={deleteAllImports}
+                  className="flex-1 px-3 py-1.5 bg-red-500/20 hover:bg-red-500/30 text-red-400 text-xs rounded-xl border border-red-500/20 transition-colors font-medium"
+                >
+                  Delete All Imports
+                </button>
+                <button
+                  onClick={() => setConfirmAll(false)}
+                  className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-slate-300 text-xs rounded-xl transition-colors"
+                >
+                  Cancel
+                </button>
+              </div>
             </div>
-          ))}
-        </div>
+          )}
+        </>
       )}
     </div>
   );
@@ -251,13 +374,14 @@ function ConfirmTable({ rows, onChange }) {
 export default function StatementImport({ open, onClose, initialFile = null, startOnHistory = false }) {
   const { transactions, setTransactions } = useFinance();
 
-  const [step,         setStep]        = useState('init');
-  const [fileType,     setFileType]    = useState(null);
-  const [fileName,     setFileName]    = useState('');
-  const [dragging,     setDragging]    = useState(false);
-  const [errorMsg,     setErrorMsg]    = useState('');
-  const [importResult, setImportResult]= useState(null);
-  const [parsedRows,   setParsedRows]  = useState([]);
+  const [step,               setStep]              = useState('init');
+  const [fileType,           setFileType]          = useState(null);
+  const [fileName,           setFileName]          = useState('');
+  const [dragging,           setDragging]          = useState(false);
+  const [errorMsg,           setErrorMsg]          = useState('');
+  const [importResult,       setImportResult]      = useState(null);
+  const [parsedRows,         setParsedRows]        = useState([]);
+  const [overlappingImports, setOverlappingImports]= useState([]);
 
   const fileRef  = useRef(null);
   const imageRef = useRef(null);
@@ -270,7 +394,7 @@ export default function StatementImport({ open, onClose, initialFile = null, sta
 
   function resetAll() {
     setStep('init'); setFileType(null); setFileName(''); setDragging(false);
-    setErrorMsg(''); setImportResult(null); setParsedRows([]);
+    setErrorMsg(''); setImportResult(null); setParsedRows([]); setOverlappingImports([]);
   }
 
   function handleClose() { resetAll(); onClose(); }
@@ -310,10 +434,22 @@ export default function StatementImport({ open, onClose, initialFile = null, sta
         if (type === 'pdf') { setStep('scanned_pdf'); return; }
         setErrorMsg('No transactions found. Try a clearer image.'); setStep('error'); return;
       }
-      setParsedRows(normalized.map(r => ({
-        ...r,
-        _isDup: isDuplicate(r, transactions),
-      })));
+
+      const rows = normalized.map(r => ({ ...r, _isDup: isDuplicate(r, transactions) }));
+      setParsedRows(rows);
+
+      const dates    = normalized.map(r => r.date).filter(Boolean).sort();
+      const newStart = dates[0];
+      const newEnd   = dates[dates.length - 1];
+      if (newStart && newEnd) {
+        const overlaps = checkOverlap(newStart, newEnd);
+        if (overlaps.length > 0) {
+          setOverlappingImports(overlaps);
+          setStep('overlap');
+          return;
+        }
+      }
+
       setStep('confirm');
     } catch (err) {
       if (err.message === 'NO_TRANSACTIONS' && type === 'pdf') {
@@ -325,23 +461,54 @@ export default function StatementImport({ open, onClose, initialFile = null, sta
     }
   }
 
+  function handleOverlapChoice(choice) {
+    if (choice === 'skip') {
+      setParsedRows(prev => prev.filter(r => !r._isDup));
+      setStep('confirm');
+    } else if (choice === 'delete') {
+      const overlapIds    = new Set(overlappingImports.map(h => h.id));
+      const updatedTxns   = transactions.filter(t => !t.import_id || !overlapIds.has(t.import_id));
+      setTransactions(() => updatedTxns);
+      const hist = localGet('fin_import_history') || [];
+      localSet('fin_import_history', hist.filter(h => !overlapIds.has(h.id)));
+      setParsedRows(prev => prev.map(r => ({ ...r, _isDup: isDuplicate(r, updatedTxns) })));
+      setStep('confirm');
+    } else {
+      resetAll();
+    }
+  }
+
   function doImport() {
+    const newImportId      = uuid();
+    const duplicatesSkipped = parsedRows.filter(r => r._isDup).length;
     const newTxns = parsedRows.map(r => ({
       id: uuid(), date: r.date, amount: r.amount, type: r.type,
       merchant: r.merchant, category: r.category, note: r.note || '',
-      source: 'imported', createdAt: new Date().toISOString(),
+      source: 'import', import_id: newImportId,
+      createdAt: new Date().toISOString(),
     }));
     setTransactions(prev => [...prev, ...newTxns]);
-    recordImport({ fileName, fileType: fileType || 'image', rows: parsedRows, importedCount: newTxns.length });
+    recordImport({ importId: newImportId, fileName, fileType: fileType || 'image', rows: parsedRows, importedCount: newTxns.length, duplicatesSkipped });
     const dates = parsedRows.map(r => r.date).filter(Boolean).sort();
     setImportResult({ imported: newTxns.length, dateStart: dates[0]||'', dateEnd: dates[dates.length-1]||'' });
     setStep('done');
   }
 
+  // ── Derived for overlap step
+  const parsedDates  = parsedRows.map(r => r.date).filter(Boolean).sort();
+  const parsedStart  = parsedDates[0] || '';
+  const parsedEnd    = parsedDates[parsedDates.length - 1] || '';
+
   return (
     <Modal open={open} onClose={handleClose} title="Import Bank Statement" size="lg">
 
-      {step === 'history' && <ImportHistory onClose={() => setStep('init')} />}
+      {step === 'history' && (
+        <ImportHistory
+          onClose={() => setStep('init')}
+          transactions={transactions}
+          setTransactions={setTransactions}
+        />
+      )}
 
       {step === 'init' && (
         <div className="space-y-4">
@@ -378,13 +545,69 @@ export default function StatementImport({ open, onClose, initialFile = null, sta
         </div>
       )}
 
+      {step === 'overlap' && (
+        <div className="space-y-4">
+          <div className="flex items-start gap-3 p-4 bg-amber-500/10 border border-amber-500/20 rounded-2xl">
+            <AlertTriangle size={18} className="text-amber-400 flex-shrink-0 mt-0.5"/>
+            <div className="min-w-0">
+              <p className="text-sm font-semibold text-white mb-1">Date Range Overlap Detected</p>
+              <p className="text-xs text-slate-400">
+                This file covers{' '}
+                <span className="text-white font-medium">{fmtDateRange(parsedStart, parsedEnd)}</span>
+                {' '}which overlaps with:
+              </p>
+              <div className="mt-2 space-y-1">
+                {overlappingImports.map(h => (
+                  <p key={h.id} className="text-xs text-amber-300">
+                    • {h.fileName} ({fmtDateRange(h.dateRangeStart, h.dateRangeEnd)}) — {h.transactionsImported} transactions
+                  </p>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <p className="text-sm font-medium text-slate-300">What would you like to do?</p>
+
+          <div className="space-y-2">
+            <button
+              onClick={() => handleOverlapChoice('skip')}
+              className="w-full text-left p-3 bg-slate-800/60 hover:bg-slate-700/60 border border-slate-700/40 hover:border-slate-600 rounded-xl transition-colors"
+            >
+              <p className="text-sm text-white font-medium">Skip duplicates — import only new transactions</p>
+              <p className="text-xs text-slate-500 mt-0.5">Detected duplicates will be filtered out before import</p>
+            </button>
+
+            <button
+              onClick={() => handleOverlapChoice('delete')}
+              className="w-full text-left p-3 bg-red-500/10 hover:bg-red-500/15 border border-red-500/20 hover:border-red-500/30 rounded-xl transition-colors"
+            >
+              <p className="text-sm text-red-300 font-medium">Delete overlapping imports first, then import</p>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Removes{' '}
+                {overlappingImports.reduce((s, h) => s + (h.transactionsImported || 0), 0)}{' '}
+                transactions from overlapping imports, then imports this file fresh
+              </p>
+            </button>
+
+            <button
+              onClick={() => handleOverlapChoice('cancel')}
+              className="w-full text-left p-3 bg-slate-800/40 hover:bg-slate-700/40 border border-slate-700/30 rounded-xl transition-colors"
+            >
+              <p className="text-sm text-slate-400 font-medium">Cancel — don't import</p>
+            </button>
+          </div>
+        </div>
+      )}
+
       {step === 'confirm' && (
         <div className="space-y-4">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between flex-wrap gap-2">
             <div>
               <p className="text-sm font-semibold text-white">{parsedRows.length} transactions found</p>
               {parsedRows.some(r => r._isDup) && (
-                <p className="text-xs text-amber-400">{parsedRows.filter(r=>r._isDup).length} possible duplicate{parsedRows.filter(r=>r._isDup).length>1?'s':''} — review before importing</p>
+                <p className="text-xs text-amber-400">
+                  {parsedRows.filter(r=>r._isDup).length} possible duplicate{parsedRows.filter(r=>r._isDup).length>1?'s':''} — review before importing
+                </p>
               )}
             </div>
             <p className="text-xs text-slate-400">{parsedRows.length} will be imported</p>
@@ -407,9 +630,7 @@ export default function StatementImport({ open, onClose, initialFile = null, sta
           </div>
           <div className="text-center space-y-2 max-w-sm">
             <p className="text-base font-semibold text-white">Claude could not extract transactions.</p>
-            <p className="text-sm text-slate-400">
-              Please try uploading as an image screenshot instead.
-            </p>
+            <p className="text-sm text-slate-400">Please try uploading as an image screenshot instead.</p>
           </div>
           <div className="flex flex-col gap-2 w-full max-w-xs">
             <Button onClick={() => imageRef.current?.click()}><Image size={14}/> Upload as Image</Button>
