@@ -202,6 +202,41 @@ ${rawAnalysis}`,
   return null;
 }
 
+// ── Overseer AI assistant ─────────────────────────────────────────────────────
+export async function askOverseer(messages, contextStr) {
+  if (!API_KEY) throw new Error('VITE_ANTHROPIC_API_KEY not set');
+
+  const systemPrompt = `You are OVERSEER, the user's personal AI assistant with full visibility into their entire life dashboard. You can see their health, nutrition, finances, productivity, goals, and appearance data.
+
+Current dashboard snapshot:
+${contextStr}
+
+Rules:
+- Respond in under 150 words
+- Use specific numbers from the data when relevant
+- Be direct, helpful, and personal — you know their actual data
+- If data is missing or zero, acknowledge it briefly and suggest they log it
+- Today's date: ${new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}`;
+
+  const res = await fetch(BASE, {
+    method: 'POST',
+    headers: HEADERS(),
+    body: JSON.stringify({
+      model: 'claude-sonnet-4-5',
+      max_tokens: 600,
+      system: systemPrompt,
+      messages,
+    }),
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error?.message || `API error ${res.status}`);
+  }
+  const data = await res.json();
+  return data.content?.[0]?.text || '';
+}
+
 // ── Style coach chat ──────────────────────────────────────────────────────────
 export async function askStyleCoach(question, historyText) {
   if (!API_KEY) throw new Error('VITE_ANTHROPIC_API_KEY not set');

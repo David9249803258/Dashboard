@@ -1,8 +1,9 @@
 import { useState, useMemo } from 'react';
-import { Plus, Trash2, Edit2, Check, X, Info, CheckCircle2 } from 'lucide-react';
+import { Plus, Trash2, Edit2, Check, X, Info, CheckCircle2, AlertTriangle } from 'lucide-react';
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import { useFinance, INCOME_TYPES, INCOME_FREQUENCIES } from './FinanceContext';
 import { calcProRataFirst, calcProRataLast } from './proRata';
+import { calculateIncomeForMonth, getSourceStatus, fmtSourceStatus, getNextPaymentDate, getDaysUntilEnd, isSourceCompleted } from './incomeCalc';
 import { Card, CardTitle } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Input, Select, Textarea } from '../../components/ui/Input';
@@ -25,36 +26,14 @@ function getPaymentsPerYear(frequency) {
   return INCOME_FREQUENCIES.find(f => f.value === frequency)?.paymentsPerYear || 12;
 }
 
-function getMonthlyNet(source) {
-  const ppy = getPaymentsPerYear(source.frequency);
-  return +(source.netAmount || 0) * ppy / 12;
-}
-
 function getAnnualNet(source) {
   const ppy = getPaymentsPerYear(source.frequency);
   return +(source.netAmount || 0) * ppy;
 }
 
-function getNextPaymentDates(frequency) {
-  const now = new Date();
-  const year = now.getFullYear(), month = now.getMonth(), day = now.getDate();
-  if (frequency === 'semi-monthly') {
-    const fifteenth   = new Date(year, month, 15);
-    const nextFirst   = new Date(year, month + 1, 1);
-    const nextFifteenth = new Date(year, month + 1, 15);
-    if (day < 15) return [fifteenth, nextFirst];
-    return [nextFirst, nextFifteenth];
-  }
-  return null;
-}
-
-function fmtPayDate(d) {
-  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-}
-
-function isSourceCompleted(source) {
-  return !!(source.endDate && source.endDate < today());
-}
+const _now = new Date();
+const _thisYear  = _now.getFullYear();
+const _thisMonth = _now.getMonth();
 
 function getStartHint(startDate, frequency, netAmount) {
   if (!startDate || !netAmount || +netAmount <= 0) return null;
@@ -110,12 +89,15 @@ function SourceCard({ source, onRemove, onToggle, onEdit }) {
   const [errors, setErrors]   = useState({});
   const set = (k, v) => setForm(p => ({ ...p, [k]: v }));
 
-  const monthlyNet  = getMonthlyNet(source);
-  const annualNet   = getAnnualNet(source);
-  const ppy         = getPaymentsPerYear(source.frequency);
-  const freqLabel   = INCOME_FREQUENCIES.find(f => f.value === source.frequency)?.label || source.frequency;
-  const nextDates   = getNextPaymentDates(source.frequency);
-  const completed   = isSourceCompleted(source);
+  const thisMonthIncome = calculateIncomeForMonth(source, _thisYear, _thisMonth);
+  const annualNet       = getAnnualNet(source);
+  const ppy             = getPaymentsPerYear(source.frequency);
+  const freqLabel       = INCOME_FREQUENCIES.find(f => f.value === source.frequency)?.label || source.frequency;
+  const nextPay         = getNextPaymentDate(source);
+  const daysLeft        = getDaysUntilEnd(source);
+  const status          = getSourceStatus(source);
+  const statusLabel     = fmtSourceStatus(source);
+  const completed       = isSourceCompleted(source);
 
   const firstPr = calcProRataFirst(source.startDate, source.frequency, +(source.netAmount || 0));
   const lastPr  = calcProRataLast(source.endDate,   source.frequency, +(source.netAmount || 0));
@@ -155,12 +137,18 @@ function SourceCard({ source, onRemove, onToggle, onEdit }) {
             <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
               <span className="text-[10px] px-1.5 py-0.5 bg-sky-500/15 text-sky-400 rounded-lg border border-sky-500/20">{source.type}</span>
               <span className="text-[10px] px-1.5 py-0.5 bg-slate-700/60 text-slate-400 rounded-lg">{freqLabel}</span>
-              {completed && (
-                <span className="text-[10px] px-1.5 py-0.5 bg-emerald-500/15 text-emerald-400 rounded-lg border border-emerald-500/20 flex items-center gap-0.5">
+              {status === 'active' && (
+                <span className="text-[10px] px-1.5 py-0.5 bg-emerald-500/15 text-emerald-400 rounded-lg border border-emerald-500/20">Active</span>
+              )}
+              {status === 'upcoming' && (
+                <span className="text-[10px] px-1.5 py-0.5 bg-sky-500/15 text-sky-400 rounded-lg border border-sky-500/20">{statusLabel}</span>
+              )}
+              {status === 'completed' && (
+                <span className="text-[10px] px-1.5 py-0.5 bg-slate-700/60 text-slate-400 rounded-lg flex items-center gap-0.5">
                   <CheckCircle2 size={9}/> Completed
                 </span>
               )}
-              {!completed && source.active === false && (
+              {status === 'inactive' && (
                 <span className="text-[10px] px-1.5 py-0.5 bg-slate-700/60 text-slate-500 rounded-lg">Inactive</span>
               )}
             </div>
@@ -185,14 +173,14 @@ function SourceCard({ source, onRemove, onToggle, onEdit }) {
 
         <div className="grid grid-cols-2 gap-3 text-xs">
           <div>
-            <p className="text-slate-500 mb-0.5">Gross / Net</p>
+            <p className="text-slate-500 mb-0.5">Gross / Net per pmt</p>
             <p className="text-white font-medium tabular-nums">
               {source.grossAmount ? fmtCurrency(+source.grossAmount) : '—'} / <span className="text-emerald-400">{fmtCurrency(+(source.netAmount || 0))}</span>
             </p>
           </div>
           <div>
-            <p className="text-slate-500 mb-0.5">Monthly net</p>
-            <p className="text-emerald-400 font-semibold tabular-nums">{fmtCurrency(monthlyNet)}</p>
+            <p className="text-slate-500 mb-0.5">This month</p>
+            <p className="text-emerald-400 font-semibold tabular-nums">{fmtCurrency(thisMonthIncome)}</p>
           </div>
           <div>
             <p className="text-slate-500 mb-0.5">Annual net</p>
@@ -220,11 +208,21 @@ function SourceCard({ source, onRemove, onToggle, onEdit }) {
           </span>
         </div>
 
-        {nextDates && !completed && (
+        {nextPay && !completed && (
           <div className="mt-2 pt-2 border-t border-slate-700/40">
             <p className="text-[10px] text-slate-500">
-              Next payments: <span className="text-sky-400 font-medium">{fmtPayDate(nextDates[0])} and {fmtPayDate(nextDates[1])}</span>
+              Next payment:{' '}
+              <span className="text-sky-400 font-medium">
+                {nextPay.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} · {fmtCurrency(+(source.netAmount || 0))}
+              </span>
             </p>
+          </div>
+        )}
+
+        {daysLeft !== null && daysLeft <= 30 && !completed && (
+          <div className="mt-1.5 flex items-center gap-1.5 text-[10px] text-amber-400">
+            <AlertTriangle size={10} className="flex-shrink-0"/>
+            <span>Ending in {daysLeft} day{daysLeft !== 1 ? 's' : ''}</span>
           </div>
         )}
 
@@ -506,7 +504,10 @@ export default function Income() {
 
   const activeSources = incomeSources.filter(s => s.active !== false && !isSourceCompleted(s));
 
-  const totalMonthlyNet = useMemo(() => activeSources.reduce((s, src) => s + getMonthlyNet(src), 0), [activeSources]);
+  const totalMonthlyNet = useMemo(
+    () => activeSources.reduce((s, src) => s + calculateIncomeForMonth(src, _thisYear, _thisMonth), 0),
+    [activeSources]
+  );
   const totalAnnualNet  = useMemo(() => activeSources.reduce((s, src) => s + getAnnualNet(src), 0), [activeSources]);
 
   const txnMonthlyInc = monthlyIncome(currentMonth);
@@ -515,8 +516,8 @@ export default function Income() {
   const srColor       = savingsRate >= 20 ? 'text-emerald-400' : savingsRate >= 10 ? 'text-amber-400' : 'text-red-400';
 
   const pieData = activeSources
-    .filter(s => getMonthlyNet(s) > 0)
-    .map(s => ({ name: s.name, value: +getMonthlyNet(s).toFixed(0) }));
+    .filter(s => calculateIncomeForMonth(s, _thisYear, _thisMonth) > 0)
+    .map(s => ({ name: s.name, value: +calculateIncomeForMonth(s, _thisYear, _thisMonth).toFixed(0) }));
 
   function addSource(src)    { setIncomeSources(prev => [src, ...prev]); }
   function removeSource(id)  { setIncomeSources(prev => prev.filter(s => s.id !== id)); }
@@ -530,7 +531,7 @@ export default function Income() {
       {/* Summary stats */}
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
         <Card className="text-center">
-          <p className="text-xs text-slate-400 mb-1">Monthly Net (Sources)</p>
+          <p className="text-xs text-slate-400 mb-1">This Month (Sources)</p>
           <p className="text-2xl font-bold text-emerald-400 tabular-nums">{fmtCurrency(totalMonthlyNet)}</p>
         </Card>
         <Card className="text-center">

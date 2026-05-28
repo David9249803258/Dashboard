@@ -1,6 +1,7 @@
 import { createContext, useContext } from 'react';
 import { useModuleData } from '../../lib/useModuleData';
 import { today } from '../../lib/utils';
+import { calculateIncomeForMonth, isSourceCompleted } from './incomeCalc';
 
 const Ctx = createContext(null);
 
@@ -129,13 +130,11 @@ export function FinanceProvider({ children }) {
     }).reduce((s, sub) => s + sub.amount, 0);
   })();
 
-  // Monthly net income from income sources
-  const monthlyNetFromSources = incomeSources.filter(s => s.active !== false).reduce((total, src) => {
-    const freq = INCOME_FREQUENCIES.find(f => f.value === src.frequency);
-    const ppy = freq?.paymentsPerYear || 12;
-    const net = +(src.netAmount || 0);
-    return total + (net * ppy / 12);
-  }, 0);
+  // Monthly net income from income sources — calendar-accurate, respects start/end dates
+  const _ctxNow = new Date();
+  const monthlyNetFromSources = incomeSources
+    .filter(s => s.active !== false && !isSourceCompleted(s))
+    .reduce((total, src) => total + calculateIncomeForMonth(src, _ctxNow.getFullYear(), _ctxNow.getMonth()), 0);
 
   return (
     <Ctx.Provider value={{

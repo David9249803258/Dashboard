@@ -11,6 +11,7 @@ import AppearanceModule from './modules/appearance';
 import GoalsModule from './modules/goals';
 import ProductivityModule from './modules/productivity';
 import NutritionModule from './modules/nutrition';
+import Overseer from './components/Overseer';
 
 // ── Mobile bottom navigation ──────────────────────────────────────────────────
 const BOTTOM_TABS = [
@@ -107,6 +108,7 @@ export default function App() {
       </main>
 
       <MobileBottomNav onMoreClick={() => setSidebarOpen(true)} />
+      <Overseer />
     </div>
   );
 }

@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
 import { Card, CardTitle } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
@@ -6,6 +6,13 @@ import { Input, Select } from '../components/ui/Input';
 import { Modal } from '../components/ui/Modal';
 import { localGet, localSet } from '../lib/storage';
 import { today } from '../lib/utils';
+import { supabase } from '../services/supabase';
+import {
+  requestNotificationPermission,
+  subscribeToPush,
+  unsubscribeFromPush,
+  getCurrentPushSubscription,
+} from '../services/pushNotifications';
 
 const TIMEZONES = Intl.supportedValuesOf?.('timeZone') || ['America/New_York','America/Chicago','America/Denver','America/Los_Angeles','Europe/London','Europe/Paris','Asia/Tokyo','Asia/Shanghai','Australia/Sydney'];
 
@@ -58,6 +65,178 @@ const CHANGELOG = [
     ],
   },
 ];
+
+// ── Device push subscription management ──────────────────────────────────────
+
+function DeviceManagement() {
+  const supported = 'Notification' in window && 'serviceWorker' in navigator;
+  const [permission, setPermission]     = useState(supported ? Notification.permission : 'unsupported');
+  const [currentSub, setCurrentSub]     = useState(null);
+  const [devices, setDevices]           = useState([]);
+  const [loadingEnable, setLoadingEnable] = useState(false);
+  const [loadingDisable, setLoadingDisable] = useState(false);
+  const [testSent, setTestSent]         = useState(false);
+  const [error, setError]               = useState('');
+
+  useEffect(() => {
+    getCurrentPushSubscription().then(setCurrentSub);
+    if (supabase) {
+      supabase.from('push_subscriptions').select('endpoint, device_label, created_at')
+        .order('created_at', { ascending: false })
+        .then(({ data }) => { if (data) setDevices(data); })
+        .catch(() => {});
+    }
+  }, []);
+
+  async function enable() {
+    setLoadingEnable(true); setError('');
+    try {
+      await requestNotificationPermission();
+      const sub = await subscribeToPush();
+      if (sub && supabase) {
+        await supabase.from('push_subscriptions').upsert({
+          endpoint:     sub.endpoint,
+          subscription: sub.toJSON(),
+          device_label: navigator.userAgent.slice(0, 80),
+        }, { onConflict: 'endpoint' }).catch(() => {});
+        const { data } = await supabase.from('push_subscriptions')
+          .select('endpoint, device_label, created_at')
+          .order('created_at', { ascending: false });
+        if (data) setDevices(data);
+      }
+      setCurrentSub(sub);
+      setPermission('granted');
+    } catch (e) {
+      if (e.message === 'permission_denied') {
+        setPermission('denied');
+        setError('Permission denied. Go to your browser/phone settings and allow notifications for this site.');
+      } else {
+        setError('Could not enable push notifications. Try again.');
+      }
+    } finally {
+      setLoadingEnable(false);
+    }
+  }
+
+  async function disable() {
+    setLoadingDisable(true);
+    try {
+      const endpoint = await unsubscribeFromPush();
+      if (endpoint && supabase) {
+        await supabase.from('push_subscriptions').delete().eq('endpoint', endpoint).catch(() => {});
+        setDevices(d => d.filter(dev => dev.endpoint !== endpoint));
+      }
+      setCurrentSub(null);
+    } catch {}
+    setLoadingDisable(false);
+  }
+
+  function sendTestNotification() {
+    if (!('Notification' in window) || Notification.permission !== 'granted') return;
+    new Notification('💊 Test Notification', {
+      body: 'Supplement reminders are working on this device!',
+      icon: '/icon-192.svg',
+    });
+    setTestSent(true);
+    setTimeout(() => setTestSent(false), 3000);
+  }
+
+  if (!supported) return null;
+
+  const isEnabled = permission === 'granted' && !!currentSub;
+  const isDenied  = permission === 'denied';
+
+  return (
+    <Card>
+      <CardTitle>Push Notification Devices</CardTitle>
+      <div className="space-y-3">
+
+        {/* This device status + controls */}
+        <div className={`p-3 rounded-xl border ${isEnabled ? 'bg-green-500/10 border-green-500/25' : isDenied ? 'bg-yellow-500/10 border-yellow-500/25' : 'bg-gray-800 border-gray-700'}`}>
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <p className="text-sm font-medium text-white">This Device</p>
+              <p className="text-xs text-gray-400 mt-0.5">
+                {isEnabled
+                  ? 'Push reminders active'
+                  : isDenied
+                    ? 'Blocked — allow in browser/phone settings'
+                    : permission === 'granted'
+                      ? 'Permission granted — tap Enable to subscribe'
+                      : 'Not subscribed'}
+              </p>
+            </div>
+            <div className="flex gap-2 flex-shrink-0">
+              {isEnabled ? (
+                <>
+                  <button
+                    onClick={sendTestNotification}
+                    className="px-2.5 py-1 text-xs bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg transition-colors"
+                  >
+                    {testSent ? '✓ Sent' : 'Test'}
+                  </button>
+                  <button
+                    onClick={disable}
+                    disabled={loadingDisable}
+                    className="px-2.5 py-1 text-xs bg-gray-700 hover:bg-gray-600 text-gray-300 rounded-lg transition-colors disabled:opacity-50"
+                  >
+                    {loadingDisable ? 'Disabling…' : 'Disable'}
+                  </button>
+                </>
+              ) : !isDenied ? (
+                <button
+                  onClick={enable}
+                  disabled={loadingEnable}
+                  className="px-2.5 py-1 text-xs bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg transition-colors disabled:opacity-50"
+                >
+                  {loadingEnable ? 'Enabling…' : 'Enable'}
+                </button>
+              ) : null}
+            </div>
+          </div>
+        </div>
+
+        {error && <p className="text-xs text-red-400">{error}</p>}
+
+        {/* All subscribed devices from Supabase */}
+        {supabase && devices.length > 0 && (
+          <div>
+            <p className="text-xs text-gray-500 font-medium mb-2">All subscribed devices</p>
+            <div className="space-y-1.5">
+              {devices.map((dev, i) => {
+                const isThis = currentSub?.endpoint === dev.endpoint;
+                return (
+                  <div key={i} className="flex items-center gap-2 p-2.5 bg-gray-800 rounded-xl">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs text-gray-300 truncate">
+                        {isThis && <span className="text-indigo-400 font-medium mr-1">This device · </span>}
+                        {dev.device_label ? dev.device_label.slice(0, 50) : dev.endpoint.slice(-30)}
+                      </p>
+                      <p className="text-xs text-gray-600">
+                        {new Date(dev.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                      </p>
+                    </div>
+                    {isThis && (
+                      <span className="px-2 py-0.5 rounded-full text-[10px] bg-green-500/20 text-green-400 border border-green-500/30 flex-shrink-0">
+                        Active
+                      </span>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {!supabase && (
+          <p className="text-xs text-gray-600">
+            Configure Supabase to see all subscribed devices across your accounts.
+          </p>
+        )}
+      </div>
+    </Card>
+  );
+}
 
 export default function Settings() {
   const { state, set, merge } = useApp();
@@ -215,51 +394,41 @@ export default function Settings() {
         )}
 
         {tab === 'Notifications' && (
-          <Card>
-            <CardTitle>Notification Preferences</CardTitle>
-            <div className="space-y-4">
-              {/* Browser permission */}
-              {'Notification' in window && (
-                <div className="flex items-center justify-between p-3 bg-gray-800 rounded-xl">
-                  <div>
-                    <p className="text-sm text-white">Browser Push Notifications</p>
-                    <p className="text-xs text-gray-400">Status: {Notification.permission}</p>
-                  </div>
-                  <Button size="sm" variant="secondary" onClick={()=>Notification.requestPermission()}>
-                    {Notification.permission === 'granted' ? '✓ Granted' : 'Request'}
-                  </Button>
+          <div className="space-y-4">
+            <Card>
+              <CardTitle>Notification Preferences</CardTitle>
+              <div className="space-y-4">
+                {[
+                  ['supplements',    'Supplement Reminders',           'Time-based reminders for untaken supplements'],
+                  ['water',          'Water Break Reminders',          'Reminder every 2 hours if goal not hit by 6pm'],
+                  ['habits',         'Evening Habit Check (8pm)',       'Alert for uncompleted habits after 8pm'],
+                  ['bills',          'Bills Due Alerts',               'Notification for upcoming bill due dates'],
+                  ['weeklyReview',   'Weekly Review (Sundays)',         'Prompt to complete your weekly reflection'],
+                  ['netWorth',       'Net Worth Update (1st of month)', 'Reminder to take a net worth snapshot'],
+                  ['morningBrief',   'Daily Morning Brief',            'Morning summary notification'],
+                ].map(([key, label, desc])=>(
+                  <label key={key} className="flex items-start gap-3 cursor-pointer">
+                    <input type="checkbox" checked={notifs[key]!==false} onChange={e=>setNotif(key,e.target.checked)}
+                      className="mt-1 w-4 h-4 rounded border-gray-600 bg-gray-800 text-indigo-600"/>
+                    <div>
+                      <p className="text-sm text-gray-200">{label}</p>
+                      <p className="text-xs text-gray-500">{desc}</p>
+                    </div>
+                  </label>
+                ))}
+                <div>
+                  <p className="text-xs text-gray-400 font-medium mb-2">Bills advance warning</p>
+                  <Select value={String(notifs.billsDaysAhead||7)} onChange={e=>setNotif('billsDaysAhead',+e.target.value)}>
+                    <option value="3">3 days ahead</option>
+                    <option value="7">7 days ahead</option>
+                    <option value="14">14 days ahead</option>
+                  </Select>
                 </div>
-              )}
-
-              {[
-                ['supplements',    'Supplement Reminders',           'Time-based reminders for untaken supplements'],
-                ['water',          'Water Break Reminders',          'Reminder every 2 hours if goal not hit by 6pm'],
-                ['habits',         'Evening Habit Check (8pm)',       'Alert for uncompleted habits after 8pm'],
-                ['bills',          'Bills Due Alerts',               'Notification for upcoming bill due dates'],
-                ['weeklyReview',   'Weekly Review (Sundays)',         'Prompt to complete your weekly reflection'],
-                ['netWorth',       'Net Worth Update (1st of month)', 'Reminder to take a net worth snapshot'],
-                ['morningBrief',   'Daily Morning Brief',            'Morning summary notification'],
-              ].map(([key, label, desc])=>(
-                <label key={key} className="flex items-start gap-3 cursor-pointer">
-                  <input type="checkbox" checked={notifs[key]!==false} onChange={e=>setNotif(key,e.target.checked)}
-                    className="mt-1 w-4 h-4 rounded border-gray-600 bg-gray-800 text-indigo-600"/>
-                  <div>
-                    <p className="text-sm text-gray-200">{label}</p>
-                    <p className="text-xs text-gray-500">{desc}</p>
-                  </div>
-                </label>
-              ))}
-
-              <div>
-                <p className="text-xs text-gray-400 font-medium mb-2">Bills advance warning</p>
-                <Select value={String(notifs.billsDaysAhead||7)} onChange={e=>setNotif('billsDaysAhead',+e.target.value)}>
-                  <option value="3">3 days ahead</option>
-                  <option value="7">7 days ahead</option>
-                  <option value="14">14 days ahead</option>
-                </Select>
               </div>
-            </div>
-          </Card>
+            </Card>
+
+            <DeviceManagement />
+          </div>
         )}
 
         {tab === 'Integrations' && (

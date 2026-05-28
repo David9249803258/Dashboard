@@ -37,3 +37,41 @@ self.addEventListener('fetch', e => {
   ) return;
   e.respondWith(networkFirst(e.request));
 });
+
+// ── Push notifications ────────────────────────────────────────────────────────
+
+self.addEventListener('push', event => {
+  let data = { title: '💊 Supplement Reminder', body: 'Time to take your supplement', tag: 'supplement' };
+  try { data = event.data.json(); } catch {}
+  event.waitUntil(
+    self.registration.showNotification(data.title, {
+      body: data.body,
+      icon: '/icon-192.svg',
+      badge: '/icon-192.svg',
+      tag: data.tag || 'supplement-reminder',
+      requireInteraction: false,
+      actions: [
+        { action: 'taken', title: '✅ Mark as taken' },
+        { action: 'snooze', title: '⏰ Snooze 30 min' },
+      ],
+    })
+  );
+});
+
+self.addEventListener('notificationclick', event => {
+  event.notification.close();
+  const suppId = event.notification.tag;
+  let url = '/';
+  if (event.action === 'taken') {
+    url = '/?action=mark-taken&supp=' + suppId;
+  } else if (event.action === 'snooze') {
+    url = '/?action=snooze&supp=' + suppId;
+  }
+  event.waitUntil(
+    clients.matchAll({ type: 'window', includeUncontrolled: true }).then(list => {
+      const existing = list.find(c => c.url.startsWith(self.location.origin));
+      if (existing) return existing.focus().then(c => c.navigate(url));
+      return clients.openWindow(url);
+    })
+  );
+});
