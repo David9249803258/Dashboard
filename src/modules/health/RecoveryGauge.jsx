@@ -116,7 +116,9 @@ export default function RecoveryGauge() {
     }
     setLogs(updated);
     if (supabase) {
-      supabase.from('hrv_rhr_logs').upsert([{ date: t, ...updates }], { onConflict: 'date' }).catch(() => {});
+      supabase.from('hrv_rhr_logs')
+        .upsert([{ date: t, ...updates }], { onConflict: 'date' })
+        .then(() => {}, () => {});
     }
   }
 

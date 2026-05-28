@@ -126,14 +126,22 @@ async function buildOverseerContext() {
 
   const workoutsThisWeek = [...workouts, ...cardio].filter(w => (w.date || '') >= sevenAgo);
 
-  const monthTxns   = txns.filter(tx => (tx.date || '') >= thirtyAgo);
-  const monthSpend  = monthTxns.filter(tx => tx.type !== 'income').reduce((s, tx) => s + (tx.amount || 0), 0);
-  const monthIncome = monthTxns.filter(tx => tx.type === 'income').reduce((s, tx) => s + (tx.amount || 0), 0);
+  const yearStart  = `${new Date().getFullYear()}-01-01`;
+  const ytdTxns    = txns.filter(tx => (tx.date || '') >= yearStart);
+  const ytdSpend   = ytdTxns.filter(tx => tx.type !== 'income').reduce((s, tx) => s + (tx.amount || 0), 0);
+  const ytdIncome  = ytdTxns.filter(tx => tx.type === 'income').reduce((s, tx) => s + (tx.amount || 0), 0);
+  const byMonth    = ytdTxns.reduce((acc, tx) => {
+    const m = (tx.date || '').slice(0, 7);
+    if (!acc[m]) acc[m] = { spend: 0, income: 0 };
+    if (tx.type !== 'income') acc[m].spend += tx.amount || 0;
+    else acc[m].income += tx.amount || 0;
+    return acc;
+  }, {});
   const totalAssets = assets.reduce((s, a) => s + (a.value || 0), 0);
   const totalLiabs  = liabs.reduce((s, l) => s + (l.balance || 0), 0);
   const netWorth    = totalAssets - totalLiabs;
   const totalDebt   = debts.reduce((s, dbt) => s + (dbt.balance || 0), 0);
-  const spendByCat  = monthTxns.filter(tx => tx.type !== 'income').reduce((acc, tx) => {
+  const spendByCat  = ytdTxns.filter(tx => tx.type !== 'income').reduce((acc, tx) => {
     acc[tx.category] = (acc[tx.category] || 0) + (tx.amount || 0);
     return acc;
   }, {});
@@ -217,18 +225,26 @@ RECENT: ${recentNutDays.map(d => {
 NET WORTH: ${fmt$(netWorth)} (assets ${fmt$(totalAssets)}, liabilities ${fmt$(totalLiabs)})
 SNAPSHOTS: ${nwSnaps.slice(0, 3).map(s => `${s.date || s.recorded_at}: ${fmt$(s.net_worth)}`).join(' | ') || 'no snapshots'}
 
-THIS MONTH (last 30 days):
-  Spent: ${fmt$(monthSpend)} | Earned: ${fmt$(monthIncome)} | Net: ${fmt$(monthIncome - monthSpend)}
-  By category: ${Object.entries(spendByCat).sort((a, b) => b[1] - a[1]).slice(0, 8).map(([c, a]) => {
-    const bud = budgets.find(b => b.category === c);
-    return `${c} ${fmt$(a)}${bud ? ` (bud ${fmt$(bud.monthly_limit)}, ${Math.round(a / bud.monthly_limit * 100)}%)` : ''}`;
-  }).join(' | ') || 'no transactions'}
+YEAR TO DATE (${yearStart} → today, ${ytdTxns.length} transactions):
+  YTD Spent: ${fmt$(ytdSpend)} | YTD Income: ${fmt$(ytdIncome)} | YTD Net: ${fmt$(ytdIncome - ytdSpend)}
+
+MONTH BY MONTH:
+${Object.entries(byMonth).sort((a, b) => a[0].localeCompare(b[0])).map(([m, v]) =>
+  `  ${m}: spent ${fmt$(v.spend)} | income ${fmt$(v.income)} | net ${fmt$(v.income - v.spend)}`
+).join('\n') || '  no data'}
+
+SPENDING BY CATEGORY YTD:
+${Object.entries(spendByCat).sort((a, b) => b[1] - a[1]).slice(0, 10).map(([c, a]) => {
+  const bud = budgets.find(b => b.category === c);
+  return `  ${c}: ${fmt$(a)}${bud ? ` (budget ${fmt$(bud.monthly_limit)}/mo)` : ''}`;
+}).join('\n') || '  no transactions'}
 
 INCOME SOURCES:
 ${incomeSrc.filter(s => s.active !== false).map(s => `  ${s.sourceName || s.source_name}: ${fmt$(s.netAmount || s.net_amount)}/${s.frequency} ${s.startDate || s.start_date}→${s.endDate || s.end_date || 'ongoing'}`).join('\n') || '  none set'}
 
-RECENT TRANSACTIONS:
-${txns.slice(0, 15).map(tx => `  ${tx.date} | ${tx.merchant || tx.category} | ${fmt$(tx.amount)} | ${tx.type} | ${tx.category}`).join('\n') || '  none'}
+ALL TRANSACTIONS YTD:
+${ytdTxns.slice(0, 50).map(tx => `  ${tx.date} | ${tx.merchant || tx.category} | ${fmt$(tx.amount)} | ${tx.type} | ${tx.category}`).join('\n') || '  none'}
+${ytdTxns.length > 50 ? `  ... and ${ytdTxns.length - 50} more` : ''}
 
 DEBTS: ${debts.length > 0 ? `${fmt$(totalDebt)} total\n${debts.map(dbt => `  ${dbt.name}: ${fmt$(dbt.balance)} @ ${dbt.interestRate || dbt.interest_rate || 0}% APR, min pmt ${fmt$(dbt.minimumPayment || dbt.minimum_payment)}`).join('\n')}` : 'none logged'}
 SAVINGS GOALS: ${savings.length > 0 ? savings.map(g => `${g.name}: ${fmt$(g.currentAmount || g.current_amount || 0)} / ${fmt$(g.targetAmount || g.target_amount)} (target ${g.targetDate || g.target_date || '?'})`).join(' | ') : 'none set'}
@@ -388,10 +404,13 @@ CRITICAL RULES:
 
       // Persist both messages to Supabase
       if (supabase) {
-        supabase.from('overseer_conversations').insert([
-          { role: 'user',      content: trimmed },
-          { role: 'assistant', content: reply   },
-        ]).catch(() => {});
+        const { error: saveErr } = await supabase
+          .from('overseer_conversations')
+          .insert([
+            { role: 'user',      content: trimmed },
+            { role: 'assistant', content: reply   },
+          ]);
+        if (saveErr) console.error('Could not save conversation:', saveErr);
       }
     } catch (e) {
       setError(e.message || 'Something went wrong');
@@ -404,7 +423,12 @@ CRITICAL RULES:
     setMsgs([]);
     saveHistory([]);
     setError('');
-    if (supabase) supabase.from('overseer_conversations').delete().neq('id', '00000000-0000-0000-0000-000000000000').catch(() => {});
+    if (supabase) {
+      supabase.from('overseer_conversations')
+        .delete()
+        .neq('id', '00000000-0000-0000-0000-000000000000')
+        .then(() => {}, () => {});
+    }
   }
 
   function handleKey(e) {

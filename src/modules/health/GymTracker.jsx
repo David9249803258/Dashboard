@@ -56,7 +56,9 @@ function StrainLogger({ strainData, setStrainData }) {
     const updated = { ...strainData, [t]: { ...today_strain, level } };
     setStrainData(updated);
     if (supabase) {
-      supabase.from('strain_logs').upsert([{ date: t, level, note: note || null }], { onConflict: 'date' }).catch(() => {});
+      supabase.from('strain_logs')
+        .upsert([{ date: t, level, note: note || null }], { onConflict: 'date' })
+        .then(() => {}, () => {});
     }
   }
   function saveNote(val) {

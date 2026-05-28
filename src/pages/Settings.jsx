@@ -123,7 +123,7 @@ function DeviceManagement() {
     try {
       const endpoint = await unsubscribeFromPush();
       if (endpoint && supabase) {
-        await supabase.from('push_subscriptions').delete().eq('endpoint', endpoint).catch(() => {});
+        await supabase.from('push_subscriptions').delete().eq('endpoint', endpoint);
         setDevices(d => d.filter(dev => dev.endpoint !== endpoint));
       }
       setCurrentSub(null);
