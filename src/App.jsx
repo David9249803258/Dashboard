@@ -14,6 +14,7 @@ import GoalsModule from './modules/goals';
 import ProductivityModule from './modules/productivity';
 import NutritionModule from './modules/nutrition';
 import Overseer from './components/Overseer';
+import AuthCallback from './pages/AuthCallback';
 
 // ── Mobile bottom navigation ──────────────────────────────────────────────────
 const BOTTOM_TABS = [
@@ -169,6 +170,7 @@ export default function App() {
             <Route path="/productivity/*" element={<ProductivityModule />} />
             <Route path="/nutrition/*"   element={<NutritionModule />} />
             <Route path="/settings"      element={<SettingsPage />} />
+            <Route path="/auth/callback" element={<AuthCallback />} />
           </Routes>
         </div>
       </main>

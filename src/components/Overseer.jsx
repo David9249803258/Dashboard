@@ -3,6 +3,7 @@ import { X, Send, Trash2, Zap, ChevronDown } from 'lucide-react';
 import { supabase } from '../services/supabase';
 import { localGet, localSet } from '../lib/storage';
 import { today, calcStreak } from '../lib/utils';
+import { getTodayEvents, getUpcomingEvents, isCalendarConnected } from '../services/googleCalendar';
 
 const API_KEY    = import.meta.env.VITE_ANTHROPIC_API_KEY;
 const CLAUDE_URL = 'https://api.anthropic.com/v1/messages';
@@ -280,6 +281,42 @@ GROOMING: ${grooming.length > 0 ? grooming.map(g => {
 }).join(', ') : 'no tasks set'}`;
 }
 
+// ── Calendar context (appended to main context when connected) ─────────────────
+
+async function buildCalendarContext() {
+  try {
+    const connected = await isCalendarConnected();
+    if (!connected) return '';
+
+    const [todayEvents, upcoming] = await Promise.all([
+      getTodayEvents().catch(() => []),
+      getUpcomingEvents(3).catch(() => []),
+    ]);
+
+    const TZ = 'America/New_York';
+    const fmtT = (iso) => iso
+      ? new Date(iso).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', timeZone: TZ })
+      : 'All day';
+
+    return `
+════ GOOGLE CALENDAR ════
+TODAY:
+${todayEvents.length === 0 ? 'No events' :
+  todayEvents.map(e => `  ${fmtT(e.start?.dateTime)}: ${e.summary || '(no title)'}${
+    e.start?.dateTime && e.end?.dateTime
+      ? ` (${Math.round((new Date(e.end.dateTime) - new Date(e.start.dateTime)) / 60000)}min)`
+      : ''
+  }`).join('\n')}
+
+NEXT 3 DAYS:
+${upcoming.length === 0 ? 'Nothing upcoming' :
+  upcoming.slice(0, 10).map(e => {
+    const date = (e.start?.date || e.start?.dateTime?.split('T')[0]);
+    return `  ${date}: ${e.summary || '(no title)'}`;
+  }).join('\n')}`;
+  } catch { return ''; }
+}
+
 function loadHistory() {
   try {
     const raw = localStorage.getItem(CHAT_KEY);
@@ -351,7 +388,8 @@ export default function Overseer() {
     setLoadingPhase('data');
     let context = '';
     try {
-      context = await buildOverseerContext();
+      const [baseCtx, calCtx] = await Promise.all([buildOverseerContext(), buildCalendarContext()]);
+      context = baseCtx + calCtx;
     } catch {
       context = '(context build failed — using available data)';
     }

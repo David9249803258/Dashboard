@@ -8,6 +8,11 @@ import { localGet, localSet } from '../lib/storage';
 import { today } from '../lib/utils';
 import { supabase } from '../services/supabase';
 import {
+  initiateGoogleAuth, isCalendarConnected, getConnectedEmail,
+  disconnectCalendar, getCalendarPrefs, saveCalendarPrefs,
+  getTodayEvents,
+} from '../services/googleCalendar';
+import {
   requestNotificationPermission,
   subscribeToPush,
   unsubscribeFromPush,
@@ -238,6 +243,146 @@ function DeviceManagement() {
   );
 }
 
+// ── Google Calendar integration settings ──────────────────────────────────────
+function GoogleCalendarSettings() {
+  const [connected,   setConnected]   = useState(false);
+  const [email,       setEmail]       = useState('');
+  const [prefs,       setPrefs]       = useState(null);
+  const [loading,     setLoading]     = useState(true);
+  const [syncing,     setSyncing]     = useState(false);
+  const [syncMsg,     setSyncMsg]     = useState('');
+  const [disconnecting, setDisconnecting] = useState(false);
+
+  useEffect(() => {
+    Promise.all([isCalendarConnected(), getConnectedEmail(), getCalendarPrefs()])
+      .then(([conn, em, p]) => {
+        setConnected(conn);
+        setEmail(em || '');
+        setPrefs(p);
+      })
+      .finally(() => setLoading(false));
+  }, []);
+
+  async function handleConnect() {
+    if (!import.meta.env.VITE_GOOGLE_CLIENT_ID) {
+      alert('Set VITE_GOOGLE_CLIENT_ID in your .env file first.');
+      return;
+    }
+    initiateGoogleAuth();
+  }
+
+  async function handleDisconnect() {
+    setDisconnecting(true);
+    await disconnectCalendar().catch(() => {});
+    setConnected(false);
+    setEmail('');
+    setDisconnecting(false);
+  }
+
+  async function handleSyncNow() {
+    setSyncing(true); setSyncMsg('');
+    try {
+      const events = await getTodayEvents();
+      setSyncMsg(`✓ Synced ${events.length} events`);
+      setTimeout(() => setSyncMsg(''), 3000);
+    } catch (e) {
+      setSyncMsg('Sync failed — ' + (e.message || 'check connection'));
+    }
+    setSyncing(false);
+  }
+
+  async function togglePref(key, val) {
+    const updated = { ...prefs, [key]: val };
+    setPrefs(updated);
+    await saveCalendarPrefs(updated);
+  }
+
+  if (loading) return <div className="h-8 bg-gray-800 rounded-xl animate-pulse" />;
+
+  if (!connected) {
+    return (
+      <div className="p-4 bg-gray-800 rounded-xl border border-gray-700 space-y-3">
+        <div className="flex items-start gap-3">
+          <div className="text-2xl flex-shrink-0">📅</div>
+          <div>
+            <p className="text-sm font-semibold text-white">Google Calendar</p>
+            <p className="text-xs text-gray-400 mt-0.5">
+              Sync your schedule, auto-create events for tasks, supplements, and bills, and get AI-powered day planning.
+            </p>
+          </div>
+        </div>
+        <div className="space-y-1.5 text-xs text-gray-500">
+          <p>What gets synced when connected:</p>
+          <p>• Today's calendar on home dashboard</p>
+          <p>• Tasks with due dates → calendar events</p>
+          <p>• Supplement reminders → timed events</p>
+          <p>• Bills due → all-day alert events</p>
+          <p>• AI Day Planner → builds your optimal schedule</p>
+        </div>
+        <div className="space-y-1.5 text-xs text-gray-600">
+          <p>Required env variables:</p>
+          <p><code className="bg-gray-700 px-1 rounded text-indigo-300">VITE_GOOGLE_CLIENT_ID</code></p>
+          <p><code className="bg-gray-700 px-1 rounded text-indigo-300">VITE_GOOGLE_CLIENT_SECRET</code></p>
+        </div>
+        <Button onClick={handleConnect} size="sm">Connect Google Calendar</Button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="p-4 bg-gray-800 rounded-xl border border-gray-700 space-y-4">
+      {/* Status header */}
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex items-start gap-3">
+          <div className="text-2xl flex-shrink-0">📅</div>
+          <div>
+            <div className="flex items-center gap-2">
+              <p className="text-sm font-semibold text-white">Google Calendar</p>
+              <span className="px-2 py-0.5 rounded-full text-[10px] bg-green-500/20 text-green-400 border border-green-500/30">
+                Connected
+              </span>
+            </div>
+            {email && <p className="text-xs text-gray-400 mt-0.5">{email}</p>}
+          </div>
+        </div>
+        <div className="flex gap-2 flex-shrink-0">
+          <button onClick={handleSyncNow} disabled={syncing}
+            className="text-xs px-2.5 py-1 bg-indigo-600/30 hover:bg-indigo-600/50 text-indigo-300 rounded-lg transition-colors disabled:opacity-50">
+            {syncing ? 'Syncing…' : 'Sync Now'}
+          </button>
+          <button onClick={handleDisconnect} disabled={disconnecting}
+            className="text-xs px-2.5 py-1 bg-red-500/20 hover:bg-red-500/30 text-red-400 rounded-lg transition-colors disabled:opacity-50">
+            {disconnecting ? 'Disconnecting…' : 'Disconnect'}
+          </button>
+        </div>
+      </div>
+
+      {syncMsg && <p className={`text-xs ${syncMsg.startsWith('✓') ? 'text-green-400' : 'text-red-400'}`}>{syncMsg}</p>}
+
+      {/* Preference toggles */}
+      {prefs && (
+        <div className="space-y-3 pt-2 border-t border-gray-700">
+          <p className="text-xs font-medium text-gray-400">Sync preferences</p>
+          {[
+            ['showOnDashboard',      'Show calendar events on home dashboard'],
+            ['autoCreateTasks',      'Auto-create events for tasks with due dates'],
+            ['autoCreateSupplements','Auto-create supplement reminder events'],
+            ['autoCreateBills',      'Auto-create bill due alerts'],
+            ['smartTriggers',        'Smart triggers (excess cash, water, habit reminders)'],
+          ].map(([key, label]) => (
+            <label key={key} className="flex items-center gap-3 cursor-pointer">
+              <input type="checkbox" checked={prefs[key] !== false}
+                onChange={e => togglePref(key, e.target.checked)}
+                className="w-4 h-4 rounded border-gray-600 bg-gray-700 text-indigo-600 flex-shrink-0" />
+              <span className="text-sm text-gray-300">{label}</span>
+            </label>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function Settings() {
   const { state, set, merge } = useApp();
   const [tab,        setTab]        = useState('Profile');
@@ -432,26 +577,31 @@ export default function Settings() {
         )}
 
         {tab === 'Integrations' && (
-          <Card>
-            <CardTitle>Integrations</CardTitle>
-            <div className="space-y-4">
-              {[
-                ['Google Health API','Sync steps, heart rate, sleep, HRV, SpO2','VITE_GOOGLE_HEALTH_TOKEN','developers.google.com/health',false],
-                ['Anthropic (Claude)','AI meal photo analysis & appearance coaching','VITE_ANTHROPIC_API_KEY','console.anthropic.com',!!import.meta.env.VITE_ANTHROPIC_API_KEY],
-                ['Supabase','Cross-device data sync','VITE_SUPABASE_URL + VITE_SUPABASE_ANON_KEY','supabase.com',!!import.meta.env.VITE_SUPABASE_URL],
-              ].map(([name,desc,key,url,connected])=>(
-                <div key={name} className="p-4 bg-gray-800 rounded-xl border border-gray-700">
-                  <div className="flex items-start justify-between mb-2">
-                    <div><p className="text-sm font-semibold text-white">{name}</p><p className="text-xs text-gray-400">{desc}</p></div>
-                    <span className={`px-2 py-0.5 rounded-full text-xs border ${connected?'bg-green-500/20 text-green-400 border-green-500/30':'bg-yellow-500/20 text-yellow-400 border-yellow-500/30'}`}>
-                      {connected?'Connected':'Not Configured'}
-                    </span>
+          <div className="space-y-4">
+            <Card>
+              <CardTitle>Integrations</CardTitle>
+              <div className="space-y-4">
+                {/* Google Calendar — OAuth-based */}
+                <GoogleCalendarSettings />
+
+                {/* Static env-var integrations */}
+                {[
+                  ['Anthropic (Claude)','AI meal photo analysis, appearance coaching, Overseer AI','VITE_ANTHROPIC_API_KEY','console.anthropic.com',!!import.meta.env.VITE_ANTHROPIC_API_KEY],
+                  ['Supabase','Cross-device data sync and persistence','VITE_SUPABASE_URL + VITE_SUPABASE_ANON_KEY','supabase.com',!!import.meta.env.VITE_SUPABASE_URL],
+                ].map(([name,desc,key,url,isConnected])=>(
+                  <div key={name} className="p-4 bg-gray-800 rounded-xl border border-gray-700">
+                    <div className="flex items-start justify-between mb-2">
+                      <div><p className="text-sm font-semibold text-white">{name}</p><p className="text-xs text-gray-400">{desc}</p></div>
+                      <span className={`px-2 py-0.5 rounded-full text-xs border ${isConnected?'bg-green-500/20 text-green-400 border-green-500/30':'bg-yellow-500/20 text-yellow-400 border-yellow-500/30'}`}>
+                        {isConnected?'Connected':'Not Configured'}
+                      </span>
+                    </div>
+                    <p className="text-xs text-gray-500">Set <code className="bg-gray-700 px-1 rounded text-indigo-300">{key}</code> in your .env. Docs: <span className="text-indigo-400">{url}</span></p>
                   </div>
-                  <p className="text-xs text-gray-500">Set <code className="bg-gray-700 px-1 rounded text-indigo-300">{key}</code> in your .env. Docs: <span className="text-indigo-400">{url}</span></p>
-                </div>
-              ))}
-            </div>
-          </Card>
+                ))}
+              </div>
+            </Card>
+          </div>
         )}
 
         {tab === 'Data' && (

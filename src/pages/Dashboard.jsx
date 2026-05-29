@@ -10,6 +10,7 @@ import { today, fmtCurrency, calcStreak, uuid } from '../lib/utils';
 import { useFinance } from '../modules/finances/FinanceContext';
 import { useWater } from '../context/WaterContext';
 import EnergyTimeline from '../components/EnergyTimeline';
+import TodaySchedule from '../components/TodaySchedule';
 import { getDailyQuote } from '../lib/constants';
 import { computeDailyScore } from '../components/TopBar';
 import { ArcGaugeSVG, computeRecoveryScore } from '../modules/health/RecoveryGauge';
@@ -621,6 +622,8 @@ export default function Dashboard() {
           </div>
         </SummaryCard>
       </div>
+
+      <TodaySchedule />
 
       <EnergyTimeline />
 
