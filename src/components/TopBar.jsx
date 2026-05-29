@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react';
-import { Menu, Plus, Flame, HelpCircle, RefreshCw } from 'lucide-react';
+import { Menu, Plus, Flame, HelpCircle, RefreshCw, Zap } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { calcStreak, today } from '../lib/utils';
 import { localGet, onSyncStatus, forceSync } from '../lib/storage';
+import { useDetections } from '../context/DetectionContext';
 import { QuickAddModal } from './QuickAddModal';
 import NotificationCenter from './NotificationCenter';
 import GlobalSearch from './GlobalSearch';
@@ -167,6 +168,28 @@ function SyncIndicator() {
   );
 }
 
+function DetectionBadge() {
+  const { badgeCount, badgeSeverity, scanning } = useDetections();
+  if (badgeCount === 0 && !scanning) return null;
+
+  const color = badgeSeverity === 'critical' ? 'bg-red-500 text-white' :
+                badgeSeverity === 'warning'  ? 'bg-amber-500 text-white' :
+                badgeSeverity === 'info'     ? 'bg-blue-500 text-white' :
+                'bg-indigo-500 text-white';
+
+  return (
+    <a href="/" className="relative flex items-center gap-1 px-2 py-1.5 rounded-xl bg-slate-800/80 border border-slate-700/40 group"
+      title={`${badgeCount} active detection${badgeCount !== 1 ? 's' : ''}`}>
+      <Zap size={13} className={scanning ? 'text-indigo-400 animate-pulse' : 'text-indigo-400'} />
+      {badgeCount > 0 && (
+        <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full min-w-[18px] text-center leading-none ${color}`}>
+          {badgeCount}
+        </span>
+      )}
+    </a>
+  );
+}
+
 export function TopBar({ onMenuClick }) {
   const { state }     = useApp();
   const { score }     = computeDailyScore();
@@ -186,6 +209,8 @@ export function TopBar({ onMenuClick }) {
         <div className="flex-1" />
 
         <SyncIndicator />
+
+        <DetectionBadge />
 
         <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-slate-800/80 border border-slate-700/40">
           <Flame size={13} className="text-orange-400" />

@@ -4,6 +4,7 @@ import { BrowserRouter } from 'react-router-dom';
 import { AppProvider } from './context/AppContext';
 import { FinanceProvider } from './modules/finances/FinanceContext';
 import { WaterProvider } from './context/WaterContext';
+import { DetectionProvider } from './context/DetectionContext';
 import App from './App';
 import './index.css';
 
@@ -21,7 +22,9 @@ ReactDOM.createRoot(document.getElementById('root')).render(
       <AppProvider>
         <FinanceProvider>
           <WaterProvider>
-            <App />
+            <DetectionProvider>
+              <App />
+            </DetectionProvider>
           </WaterProvider>
         </FinanceProvider>
       </AppProvider>

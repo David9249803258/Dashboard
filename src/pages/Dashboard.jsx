@@ -11,6 +11,7 @@ import { useFinance } from '../modules/finances/FinanceContext';
 import { useWater } from '../context/WaterContext';
 import EnergyTimeline from '../components/EnergyTimeline';
 import TodaySchedule from '../components/TodaySchedule';
+import DetectionCenter from '../components/DetectionCenter';
 import { getDailyQuote } from '../lib/constants';
 import { computeDailyScore } from '../components/TopBar';
 import { ArcGaugeSVG, computeRecoveryScore } from '../modules/health/RecoveryGauge';
@@ -488,6 +489,8 @@ export default function Dashboard() {
   return (
     <div className="max-w-5xl mx-auto space-y-5">
       <MorningBrief />
+
+      <DetectionCenter />
 
       {/* Peak Score */}
       <Card className="bg-gradient-to-br from-indigo-900/40 to-gray-900">

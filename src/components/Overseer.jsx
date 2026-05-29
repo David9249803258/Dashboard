@@ -283,6 +283,22 @@ GROOMING: ${grooming.length > 0 ? grooming.map(g => {
 
 // ── Calendar context (appended to main context when connected) ─────────────────
 
+// ── Detection context ──────────────────────────────────────────────────────────
+// Reads the last scan results cached by DetectionContext — avoids re-running
+// the full scan just for the Overseer system prompt.
+
+function buildDetectionContext() {
+  try {
+    const detections = localGet('last_detections') || [];
+    if (detections.length === 0) return '';
+    const ORDER = { critical: 0, warning: 1, opportunity: 2, info: 3 };
+    const sorted = [...detections].sort((a, b) => (ORDER[a.severity] || 3) - (ORDER[b.severity] || 3));
+    return `
+════ ACTIVE DETECTIONS (${sorted.length} issues) ════
+${sorted.map(d => `[${d.severity.toUpperCase()}] ${d.module}: ${d.title}\n  ${d.detail}`).join('\n\n')}`;
+  } catch { return ''; }
+}
+
 async function buildCalendarContext() {
   try {
     const connected = await isCalendarConnected();
@@ -389,7 +405,7 @@ export default function Overseer() {
     let context = '';
     try {
       const [baseCtx, calCtx] = await Promise.all([buildOverseerContext(), buildCalendarContext()]);
-      context = baseCtx + calCtx;
+      context = baseCtx + calCtx + buildDetectionContext();
     } catch {
       context = '(context build failed — using available data)';
     }
