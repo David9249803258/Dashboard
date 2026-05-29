@@ -92,21 +92,13 @@ export default function NutritionModule() {
         </div>
       )}
 
-      {/* Water stat card with quick +1 cup */}
+      {/* Water — compact link to Health module */}
       {tab === 'Log' && (
-        <div className="flex items-center justify-between p-3 bg-gray-900 border border-gray-800 rounded-xl">
-          <button onClick={() => navigate('/health')} className="flex items-center gap-3 flex-1 text-left">
-            <Droplets size={16} className="text-cyan-400"/>
-            <div>
-              <p className="text-xs font-medium text-cyan-400">Hydration</p>
-              <p className="text-sm text-white">{waterCups}/{waterGoal} cups · {Math.round((waterCups/waterGoal)*100)}%</p>
-            </div>
-          </button>
-          <button onClick={()=>{const w=localGet('health_water')||{};const t2=today();w[t2]=(w[t2]||0)+1;localSet('health_water',w);}}
-            className="flex items-center gap-1 px-2.5 py-1 bg-cyan-600/80 hover:bg-cyan-600 rounded-lg text-xs text-white font-medium transition-colors">
-            <Plus size={11}/>Cup
-          </button>
-        </div>
+        <button onClick={() => navigate('/health')}
+          className="w-full flex items-center gap-2 p-2.5 bg-gray-900 border border-gray-800 rounded-xl text-left hover:border-cyan-500/40 transition-colors">
+          <Droplets size={14} className="text-cyan-400 flex-shrink-0"/>
+          <span className="text-xs text-cyan-400 font-medium">Track water in Health →</span>
+        </button>
       )}
 
       {/* Tab bar */}

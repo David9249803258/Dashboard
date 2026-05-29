@@ -256,6 +256,66 @@ export default function NetWorth() {
         </Card>
       </div>
 
+      {/* Debt paydown tracker */}
+      {liabilities.length > 0 && (() => {
+        const totalBal  = liabilities.reduce((s, l) => s + (l.balance || 0), 0);
+        const totalOrig = liabilities.reduce((s, l) => s + (l.original_balance || l.balance || 0), 0);
+        const overallPct = totalOrig > 0 ? Math.round((1 - totalBal / totalOrig) * 100) : 0;
+        return (
+          <Card>
+            <CardTitle>Debt Paydown Tracker</CardTitle>
+            <div className="space-y-4">
+              {/* Individual debts */}
+              {liabilities.map(liab => {
+                const orig    = liab.original_balance || liab.balance || 0;
+                const pct     = orig > 0 ? Math.round((1 - (liab.balance || 0) / orig) * 100) : 0;
+                const rate    = liab.interestRate || 0;
+                const minPmt  = liab.minimumPayment || liab.minimum_payment || 0;
+                const estPayoffMonths = minPmt > 0 ? Math.ceil((liab.balance || 0) / minPmt) : null;
+                const estPayoffDate = estPayoffMonths ? (() => {
+                  const d = new Date(); d.setMonth(d.getMonth() + estPayoffMonths);
+                  return d.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+                })() : null;
+                return (
+                  <div key={liab.id}>
+                    <div className="flex items-center justify-between mb-1.5 gap-2 flex-wrap">
+                      <span className="text-sm font-medium text-white">{liab.name}</span>
+                      <span className="text-xs text-slate-400 tabular-nums">
+                        {fmtCurrency(liab.balance || 0)} remaining of {fmtCurrency(orig)}
+                      </span>
+                    </div>
+                    <div className="h-2.5 bg-slate-800 rounded-full overflow-hidden mb-1">
+                      <div className="h-full rounded-full bg-emerald-500 transition-all"
+                        style={{ width: `${Math.min(100, pct)}%` }} />
+                    </div>
+                    <div className="flex items-center justify-between text-[10px] text-slate-500 flex-wrap gap-1">
+                      <span>{pct}% paid off</span>
+                      {rate > 0 && <span>{rate}% APR</span>}
+                      {estPayoffDate && <span>Est. payoff: {estPayoffDate}</span>}
+                    </div>
+                  </div>
+                );
+              })}
+
+              {/* Overall progress */}
+              <div className="pt-3 border-t border-slate-800">
+                <div className="flex items-center justify-between mb-1.5">
+                  <span className="text-sm font-semibold text-white">Total Debt Progress</span>
+                  <span className="text-xs text-slate-400 tabular-nums">
+                    {fmtCurrency(totalBal)} of {fmtCurrency(totalOrig)} original
+                  </span>
+                </div>
+                <div className="h-3 bg-slate-800 rounded-full overflow-hidden mb-1">
+                  <div className="h-full rounded-full bg-gradient-to-r from-emerald-600 to-emerald-400 transition-all"
+                    style={{ width: `${Math.min(100, overallPct)}%` }} />
+                </div>
+                <p className="text-xs text-emerald-400 font-medium">{overallPct}% of total debt paid off</p>
+              </div>
+            </div>
+          </Card>
+        );
+      })()}
+
       {/* Historical chart */}
       {chartData.length > 1 && (
         <Card>

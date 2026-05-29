@@ -4,9 +4,11 @@ import BalanceSheet from './BalanceSheet';
 import Income from './Income';
 import Forecast from './Forecast';
 import Projects from './Projects';
+import WealthfrontHYSA from './WealthfrontHYSA';
 
 const TABS = [
   { id: 'Net Worth',    label: 'Net Worth'    },
+  { id: 'HYSA',         label: '🏦 HYSA'      },
   { id: 'Balance Sheet',label: 'Balance Sheet'},
   { id: 'Income',       label: 'Income'       },
   { id: 'Forecast',     label: 'Forecast'     },
@@ -41,6 +43,7 @@ function FinanceModuleInner() {
 
       <div className="page-enter" key={tab}>
         {tab === 'Net Worth'     && <NetWorth />}
+        {tab === 'HYSA'          && <WealthfrontHYSA />}
         {tab === 'Balance Sheet' && <BalanceSheet />}
         {tab === 'Income'        && <Income />}
         {tab === 'Forecast'      && <Forecast onNavigateToIncome={() => setTab('Income')} />}
