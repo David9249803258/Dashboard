@@ -1026,7 +1026,7 @@ export default function Dashboard() {
 
       {/* Charts Row */}
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
-        <div className="lg:col-span-3"><IncomeSpendChart data={sixMonthData} /></div>
+        <div className="lg:col-span-3"><EnergyTimeline /></div>
         <div className="lg:col-span-2"><SpendDonut data={donutData} /></div>
       </div>
 
@@ -1286,7 +1286,7 @@ export default function Dashboard() {
 
       <TodaySchedule />
 
-      <EnergyTimeline />
+      <IncomeSpendChart data={sixMonthData} />
 
       <JournalPrompt />
 
