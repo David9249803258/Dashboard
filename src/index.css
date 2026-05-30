@@ -16,19 +16,57 @@
   input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; }
   input[type="date"]::-webkit-calendar-picker-indicator { filter: invert(1) opacity(0.4); }
   input[type="range"] { @apply accent-indigo-500; }
+
+  /* Focus rings on all form controls */
+  input:focus, select:focus, textarea:focus {
+    outline: none;
+    box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.5);
+  }
 }
 
 @layer utilities {
+  /* Page transition */
   .page-enter { animation: fadeIn 200ms ease-out; }
+
+  /* Card base — used by the Card component */
   .card-base {
     @apply bg-gradient-to-br from-slate-900 to-slate-800/60 border border-slate-700/50 rounded-2xl;
   }
+
+  /* Section label pattern (11px caps) */
+  .section-label {
+    @apply text-[10px] font-semibold uppercase tracking-widest text-slate-500;
+  }
+
+  /* Empty state pattern */
+  .empty-state {
+    @apply flex flex-col items-center justify-center gap-3 py-12 text-center;
+  }
+  .empty-state-icon  { @apply text-5xl select-none; }
+  .empty-state-title { @apply text-lg font-bold text-white; }
+  .empty-state-desc  { @apply text-sm text-slate-400 max-w-xs leading-relaxed; }
+
+  /* Tab styles */
   .tab-active-health       { @apply bg-rose-500/15 text-rose-400 border border-rose-500/20; }
   .tab-active-nutrition    { @apply bg-emerald-500/15 text-emerald-400 border border-emerald-500/20; }
   .tab-active-finances     { @apply bg-sky-500/15 text-sky-400 border border-sky-500/20; }
   .tab-active-productivity { @apply bg-violet-500/15 text-violet-400 border border-violet-500/20; }
   .tab-active-goals        { @apply bg-amber-500/15 text-amber-400 border border-amber-500/20; }
   .tab-active-appearance   { @apply bg-teal-500/15 text-teal-400 border border-teal-500/20; }
+
+  /* Global interactive element transitions */
+  button, a, [role="button"] {
+    transition: opacity 150ms ease, transform 150ms ease, background-color 150ms ease, border-color 150ms ease, box-shadow 150ms ease;
+  }
+  button:active:not(:disabled), [role="button"]:active {
+    transform: scale(0.97);
+  }
+
+  /* Card hover lift */
+  .card-hover {
+    @apply transition-all duration-150 hover:shadow-lg hover:shadow-black/20;
+  }
+  .card-hover:hover { opacity: 0.96; }
 }
 
 @keyframes fadeIn {
@@ -39,4 +77,14 @@
 @keyframes slideUp {
   from { opacity: 0; transform: translateY(12px); }
   to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes pulse-slow {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
 }

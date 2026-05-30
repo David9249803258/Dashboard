@@ -8,7 +8,13 @@ import { Card }     from '../../components/ui/Card';
 import { localGet, setData } from '../../lib/storage';
 import { supabase }  from '../../services/supabase';
 
-const TABS = ['Tasks','Pomodoro','Habits','Journal','Weekly Review'];
+const TABS = [
+  { id: 'Tasks',         label: '✅ Tasks'         },
+  { id: 'Pomodoro',      label: '⏱️ Pomodoro'      },
+  { id: 'Habits',        label: '🔥 Habits'        },
+  { id: 'Journal',       label: '📝 Journal'       },
+  { id: 'Weekly Review', label: '📊 Weekly Review' },
+];
 
 // ── This Week's Focus ─────────────────────────────────────────────────────────
 function WeeklyFocusPin({ onNavigateTask }) {
@@ -101,10 +107,10 @@ export default function ProductivityModule() {
       <WeeklyFocusPin />
 
       <div className="flex gap-1 overflow-x-auto pb-1">
-        {TABS.map(t => (
-          <button key={t} onClick={() => setTab(t)}
-            className={`px-3 py-1.5 rounded-lg text-sm font-medium whitespace-nowrap transition-colors ${tab === t ? 'bg-purple-600 text-white' : 'text-gray-400 hover:text-white hover:bg-gray-800'}`}>
-            {t}
+        {TABS.map(({ id, label }) => (
+          <button key={id} onClick={() => setTab(id)}
+            className={`px-3 py-1.5 rounded-xl text-sm font-medium whitespace-nowrap transition-all duration-150 flex-shrink-0 ${tab === id ? 'bg-violet-600/80 text-white shadow-sm' : 'text-gray-400 hover:text-white hover:bg-gray-800/70'}`}>
+            {label}
           </button>
         ))}
       </div>

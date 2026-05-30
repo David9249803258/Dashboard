@@ -592,19 +592,24 @@ function _removed_StrugglesWidget() {
 const DONUT_COLORS = ['#3b82f6','#ef4444','#f59e0b','#22c55e','#8b5cf6','#14b8a6','#ec4899','#f97316'];
 
 // ── KPI card ──────────────────────────────────────────────────────────────────
-function KPICard({ title, primary, secondary, icon, gradient, sparkData, animDelay = 0 }) {
+// KPI card — muted glass with colored left accent (not saturated full-gradient)
+function KPICard({ title, primary, secondary, icon, accent = '#6366f1', primaryColor, sparkData, animDelay = 0 }) {
   return (
-    <div className={`${gradient} rounded-2xl p-4 relative overflow-hidden text-white`}
-      style={{ animation: 'fadeUp 0.5s ease both', animationDelay: `${animDelay}ms` }}>
-      <div className="absolute right-3 top-3 text-3xl opacity-20 select-none pointer-events-none leading-none">{icon}</div>
-      <p className="text-white/70 text-[10px] font-semibold uppercase tracking-wider mb-1">{title}</p>
-      <p className="text-2xl sm:text-3xl font-bold tabular-nums leading-tight">{primary}</p>
-      <p className="text-white/60 text-[11px] mt-1 leading-snug min-h-[14px]">{secondary}</p>
+    <div className="rounded-2xl p-4 relative overflow-hidden bg-slate-800/40 border border-slate-700/40"
+      style={{
+        animation:      'fadeUp 0.5s ease both',
+        animationDelay: `${animDelay}ms`,
+        borderLeft:     `3px solid ${accent}`,
+      }}>
+      <div className="absolute right-3 top-3 text-3xl opacity-8 select-none pointer-events-none leading-none">{icon}</div>
+      <p className="text-slate-400 text-[10px] font-semibold uppercase tracking-widest mb-1.5">{title}</p>
+      <p className="text-2xl sm:text-3xl font-bold tabular-nums leading-tight" style={{ color: primaryColor || '#f8fafc' }}>{primary}</p>
+      <p className="text-slate-400 text-[11px] mt-1 leading-snug min-h-[14px]">{secondary}</p>
       {sparkData && (
         <div className="mt-2 -mb-1">
           <ResponsiveContainer width="100%" height={28}>
             <LineChart data={sparkData} margin={{ top:2, bottom:2, left:0, right:0 }}>
-              <Line type="monotone" dataKey="v" stroke="rgba(255,255,255,0.5)" strokeWidth={1.5} dot={false} connectNulls />
+              <Line type="monotone" dataKey="v" stroke={accent} strokeWidth={1.5} dot={false} connectNulls />
             </LineChart>
           </ResponsiveContainer>
         </div>
@@ -988,21 +993,21 @@ export default function Dashboard() {
           title="Income This Month"
           primary={fmtCurrency(income)}
           secondary={incomeMoM !== 0 ? `${incomeMoM >= 0 ? '↑' : '↓'} ${fmtCurrency(Math.abs(incomeMoM))} vs last month` : 'No change vs last month'}
-          icon="💰" gradient="bg-gradient-to-br from-blue-500 to-indigo-600"
+          icon="💰" accent="#3b82f6" primaryColor="#93c5fd"
           sparkData={incomeSpark} animDelay={0}
         />
         <KPICard
           title="Monthly Spend"
           primary={fmtCurrency(expenses)}
           secondary={income > 0 ? `${Math.round((expenses/income)*100)}% of income` : 'No income logged'}
-          icon="📊" gradient="bg-gradient-to-br from-rose-400 to-red-600"
+          icon="📊" accent="#ef4444" primaryColor="#fca5a5"
           sparkData={spendSpark} animDelay={60}
         />
         <KPICard
           title="Peak Score"
           primary={`${score}/100`}
           secondary={topDetractor ? `Dragged by ${topDetractor.label.split(' ')[0]} (${topDetractor.pts}/${topDetractor.max})` : 'All areas performing well'}
-          icon="⚡" gradient="bg-gradient-to-br from-violet-500 to-purple-700"
+          icon="⚡" accent="#8b5cf6" primaryColor="#c4b5fd"
           sparkData={scoreSpark} animDelay={120}
         />
         <KPICard
@@ -1011,14 +1016,14 @@ export default function Dashboard() {
           secondary={hysaBal !== null
             ? (hysaInterest ? `~${fmtCurrency(hysaInterest)}/mo interest · ${hysaApy}% APY` : `${hysaApy}% APY`)
             : 'Set up in Finance → HYSA'}
-          icon="🏦" gradient="bg-gradient-to-br from-teal-400 to-emerald-600"
+          icon="🏦" accent="#14b8a6" primaryColor="#5eead4"
           animDelay={180}
         />
         <KPICard
           title="Net Savings Rate"
           primary={`${savingsRate}%`}
           secondary={netSaved >= 0 ? `Saved ${fmtCurrency(netSaved)} this month` : `Overspent ${fmtCurrency(Math.abs(netSaved))}`}
-          icon="📈" gradient={`bg-gradient-to-br ${savingsRate >= 20 ? 'from-amber-400 to-orange-500' : savingsRate >= 0 ? 'from-amber-400 to-orange-500' : 'from-red-400 to-rose-600'}`}
+          icon="📈" accent={savingsRate >= 0 ? '#f59e0b' : '#ef4444'} primaryColor={savingsRate >= 0 ? '#fcd34d' : '#fca5a5'}
           animDelay={240}
         />
       </div>

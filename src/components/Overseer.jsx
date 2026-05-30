@@ -351,6 +351,13 @@ function saveHistory(msgs) {
 
 export default function Overseer() {
   const [open,         setOpen]        = useState(false);
+
+  // Listen for header button trigger (from OverseerHeaderBtn in TopBar)
+  useEffect(() => {
+    const handler = () => setOpen(true);
+    window.addEventListener('overseer:open', handler);
+    return () => window.removeEventListener('overseer:open', handler);
+  }, []);
   const [msgs,         setMsgs]        = useState(() => loadHistory());
   const [input,        setInput]       = useState('');
   const [loadingPhase, setLoadingPhase] = useState(null); // null | 'data' | 'thinking'
@@ -501,10 +508,10 @@ CRITICAL RULES:
       {/* Floating trigger */}
       <button
         onClick={() => setOpen(o => !o)}
-        className="fixed bottom-20 right-4 lg:bottom-6 z-40 w-12 h-12 rounded-full bg-indigo-600 hover:bg-indigo-500 shadow-lg shadow-indigo-900/50 flex items-center justify-center transition-all active:scale-95"
+        className="fixed bottom-20 right-4 z-40 lg:hidden w-11 h-11 rounded-full bg-slate-900/95 border border-indigo-500/40 hover:border-indigo-500/80 hover:bg-indigo-500/10 flex items-center justify-center transition-all active:scale-95 shadow-lg shadow-black/30"
         aria-label="Open Overseer"
       >
-        {open ? <ChevronDown size={20} className="text-white" /> : <Zap size={20} className="text-white" />}
+        {open ? <ChevronDown size={18} className="text-indigo-400" /> : <Zap size={18} className="text-indigo-400" />}
       </button>
 
       {/* Chat panel */}

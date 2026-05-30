@@ -282,9 +282,9 @@ export default function NutritionDashboard({ totals, targets, todayLogs, onRemov
           <CalorieRing consumed={totals.calories || 0} target={targets.calories} />
           <div className="flex-1 space-y-3 min-w-0">
             <MacroBar label="Protein" current={+(totals.protein_g||0).toFixed(1)} target={targets.protein_g} color="#3b82f6" unit="g" />
-            <MacroBar label="Carbs"   current={+(totals.carbs_g||0).toFixed(1)}   target={targets.carbs_g}   color="#22c55e" unit="g" />
-            <MacroBar label="Fat"     current={+(totals.fat_g||0).toFixed(1)}     target={targets.fat_g}     color="#f59e0b" unit="g" />
-            <MacroBar label="Fiber"   current={+(totals.fiber_g||0).toFixed(1)}   target={targets.fiber_g||25} color="#f97316" unit="g" />
+            <MacroBar label="Carbs"   current={+(totals.carbs_g||0).toFixed(1)}   target={targets.carbs_g}   color="#f97316" unit="g" />
+            <MacroBar label="Fat"     current={+(totals.fat_g||0).toFixed(1)}     target={targets.fat_g}     color="#eab308" unit="g" />
+            <MacroBar label="Fiber"   current={+(totals.fiber_g||0).toFixed(1)}   target={targets.fiber_g||25} color="#22c55e" unit="g" />
           </div>
         </div>
       </div>

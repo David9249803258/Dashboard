@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Routes, Route, useLocation, NavLink } from 'react-router-dom';
-import { LayoutDashboard, Heart, DollarSign, Target, UtensilsCrossed, Zap, Sparkles, MoreHorizontal, Settings as SettingsIcon } from 'lucide-react';
+import { LayoutDashboard, Heart, DollarSign, Target, Zap, Settings as SettingsIcon } from 'lucide-react';
 import { Sidebar } from './components/Sidebar';
 import { TopBar } from './components/TopBar';
 import { supabase } from './services/supabase';
@@ -17,20 +17,21 @@ import Overseer from './components/Overseer';
 import AuthCallback from './pages/AuthCallback';
 
 // ── Mobile bottom navigation ──────────────────────────────────────────────────
+// Order: Home · Finances · Health · Goals · Productivity
 const BOTTOM_TABS = [
-  { to: '/',          icon: LayoutDashboard, label: 'Home',      color: 'text-indigo-400',  end: true  },
-  { to: '/health',    icon: Heart,           label: 'Health',    color: 'text-rose-400',    end: false },
-  { to: '/nutrition', icon: UtensilsCrossed, label: 'Nutrition', color: 'text-emerald-400', end: false },
-  { to: '/finances',  icon: DollarSign,      label: 'Finances',  color: 'text-sky-400',     end: false },
-  { to: '/goals',     icon: Target,          label: 'Goals',     color: 'text-amber-400',   end: false },
+  { to: '/',             icon: LayoutDashboard, label: 'Home',         color: 'text-indigo-400',  end: true  },
+  { to: '/finances',     icon: DollarSign,      label: 'Finances',     color: 'text-sky-400',     end: false },
+  { to: '/health',       icon: Heart,           label: 'Health',       color: 'text-rose-400',    end: false },
+  { to: '/goals',        icon: Target,          label: 'Goals',        color: 'text-amber-400',   end: false },
+  { to: '/productivity', icon: Zap,             label: 'Productivity', color: 'text-violet-400',  end: false },
 ];
 
-function MobileBottomNav({ onMoreClick }) {
+function MobileBottomNav({ onSettingsClick }) {
   const { pathname } = useLocation();
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-30 lg:hidden bg-slate-950/95 backdrop-blur-md border-t border-slate-800/60 safe-area-bottom">
-      <div className="flex items-stretch">
+    <nav className="fixed bottom-0 left-0 right-0 z-30 lg:hidden bg-slate-950/95 backdrop-blur-md border-t border-slate-800/50 safe-area-bottom" style={{ height: 64 }}>
+      <div className="flex items-stretch h-full">
         {BOTTOM_TABS.map(({ to, icon: Icon, label, color, end }) => {
           const isActive = end ? pathname === to : pathname.startsWith(to);
           return (
@@ -38,22 +39,31 @@ function MobileBottomNav({ onMoreClick }) {
               key={to}
               to={to}
               end={end}
-              className="flex-1 flex flex-col items-center justify-center gap-0.5 py-2 transition-colors"
+              className="flex-1 flex flex-col items-center justify-center gap-1.5 py-2 transition-all duration-150"
             >
-              <Icon size={20} className={isActive ? color : 'text-slate-600'} />
-              <span className={`text-[10px] font-medium leading-none ${isActive ? color : 'text-slate-600'}`}>
-                {label}
+              <Icon size={21} className={`transition-colors duration-150 ${isActive ? color : 'text-slate-600'}`} strokeWidth={isActive ? 2.5 : 1.8} />
+              <span className={`text-[9px] font-semibold leading-none tracking-wide transition-colors duration-150 ${isActive ? color : 'text-slate-600'}`}>
+                {label.toUpperCase()}
               </span>
             </NavLink>
           );
         })}
-        <button
-          onClick={onMoreClick}
-          className="flex-1 flex flex-col items-center justify-center gap-0.5 py-2 transition-colors"
+        {/* Settings replaces "More" */}
+        <NavLink
+          to="/settings"
+          className={({ isActive }) =>
+            `flex-1 flex flex-col items-center justify-center gap-1.5 py-2 transition-all duration-150`
+          }
         >
-          <MoreHorizontal size={20} className="text-slate-600" />
-          <span className="text-[10px] font-medium leading-none text-slate-600">More</span>
-        </button>
+          {({ isActive }) => (
+            <>
+              <SettingsIcon size={21} className={`transition-colors duration-150 ${isActive ? 'text-slate-300' : 'text-slate-600'}`} strokeWidth={isActive ? 2.5 : 1.8} />
+              <span className={`text-[9px] font-semibold leading-none tracking-wide transition-colors duration-150 ${isActive ? 'text-slate-300' : 'text-slate-600'}`}>
+                SETTINGS
+              </span>
+            </>
+          )}
+        </NavLink>
       </div>
     </nav>
   );
@@ -142,7 +152,7 @@ export default function App() {
         </div>
       </main>
 
-      <MobileBottomNav onMoreClick={() => setSidebarOpen(true)} />
+      <MobileBottomNav />
       <Overseer />
     </div>
   );

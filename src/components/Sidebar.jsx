@@ -1,59 +1,52 @@
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, Heart, DollarSign, Sparkles, Target, Zap, UtensilsCrossed, Settings, X } from 'lucide-react';
+import { useApp }  from '../context/AppContext';
+import {
+  LayoutDashboard, Heart, DollarSign, Sparkles,
+  Target, Zap, UtensilsCrossed, Settings, X, Briefcase,
+} from 'lucide-react';
 
-const NAV = [
+const NAV_GROUPS = [
   {
-    to: '/',
-    icon: LayoutDashboard,
-    label: 'Dashboard',
-    activeClass: 'bg-indigo-500/15 text-indigo-400 border border-indigo-500/20 shadow-[0_0_10px_rgba(99,102,241,0.15)]',
-    dotColor: 'bg-indigo-400',
+    label: 'YOUR LIFE',
+    items: [
+      { to: '/', end: true, icon: LayoutDashboard, label: 'Home',
+        activeClass: 'bg-indigo-500/10 text-indigo-300', accentColor: '#818cf8' },
+      { to: '/goals', icon: Target, label: 'Goals',
+        activeClass: 'bg-amber-500/10 text-amber-300', accentColor: '#fcd34d' },
+    ],
   },
   {
-    to: '/health',
-    icon: Heart,
-    label: 'Health',
-    activeClass: 'bg-rose-500/15 text-rose-400 border border-rose-500/20 shadow-[0_0_10px_rgba(251,113,133,0.15)]',
-    dotColor: 'bg-rose-400',
+    label: 'WELLNESS',
+    items: [
+      { to: '/health', icon: Heart, label: 'Health',
+        activeClass: 'bg-rose-500/10 text-rose-300', accentColor: '#fda4af' },
+      { to: '/nutrition', icon: UtensilsCrossed, label: 'Nutrition',
+        activeClass: 'bg-emerald-500/10 text-emerald-300', accentColor: '#6ee7b7' },
+      { to: '/appearance', icon: Sparkles, label: 'Appearance',
+        activeClass: 'bg-teal-500/10 text-teal-300', accentColor: '#5eead4' },
+    ],
   },
   {
-    to: '/nutrition',
-    icon: UtensilsCrossed,
-    label: 'Nutrition',
-    activeClass: 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/20 shadow-[0_0_10px_rgba(52,211,153,0.15)]',
-    dotColor: 'bg-emerald-400',
+    label: 'MONEY',
+    items: [
+      { to: '/finances', icon: DollarSign, label: 'Finances',
+        activeClass: 'bg-sky-500/10 text-sky-300', accentColor: '#7dd3fc' },
+    ],
   },
   {
-    to: '/finances',
-    icon: DollarSign,
-    label: 'Finances',
-    activeClass: 'bg-sky-500/15 text-sky-400 border border-sky-500/20 shadow-[0_0_10px_rgba(56,189,248,0.15)]',
-    dotColor: 'bg-sky-400',
-  },
-  {
-    to: '/appearance',
-    icon: Sparkles,
-    label: 'Appearance',
-    activeClass: 'bg-teal-500/15 text-teal-400 border border-teal-500/20 shadow-[0_0_10px_rgba(45,212,191,0.15)]',
-    dotColor: 'bg-teal-400',
-  },
-  {
-    to: '/goals',
-    icon: Target,
-    label: 'Goals',
-    activeClass: 'bg-amber-500/15 text-amber-400 border border-amber-500/20 shadow-[0_0_10px_rgba(251,191,36,0.15)]',
-    dotColor: 'bg-amber-400',
-  },
-  {
-    to: '/productivity',
-    icon: Zap,
-    label: 'Productivity',
-    activeClass: 'bg-violet-500/15 text-violet-400 border border-violet-500/20 shadow-[0_0_10px_rgba(167,139,250,0.15)]',
-    dotColor: 'bg-violet-400',
+    label: 'WORK',
+    items: [
+      { to: '/productivity', icon: Zap, label: 'Productivity',
+        activeClass: 'bg-violet-500/10 text-violet-300', accentColor: '#c4b5fd' },
+    ],
   },
 ];
 
 export function Sidebar({ open, onClose }) {
+  const { state } = useApp();
+  const name   = state.profile?.name || 'Dashboard';
+  const initials = name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase() || 'ME';
+
   return (
     <>
       {open && (
@@ -61,61 +54,75 @@ export function Sidebar({ open, onClose }) {
       )}
 
       <aside className={`
-        fixed top-0 left-0 h-full w-64 bg-slate-950 border-r border-slate-800/60 z-40 flex flex-col
+        fixed top-0 left-0 h-full w-64 bg-slate-950 border-r border-slate-800/50 z-40 flex flex-col
         transition-transform duration-200 ease-out
         ${open ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
       `}>
-        {/* Logo */}
-        <div className="flex items-center justify-between px-5 py-5 border-b border-slate-800/60">
-          <div>
-            <p className="text-white font-bold text-lg tracking-tight leading-none">MyDashboard</p>
-            <p className="text-xs text-slate-500 mt-1">Personal command center</p>
+        {/* Profile header */}
+        <div className="flex items-center justify-between px-5 py-5 border-b border-slate-800/50">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-full bg-indigo-600/80 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
+              {initials}
+            </div>
+            <div className="min-w-0">
+              <p className="text-white font-semibold text-sm truncate leading-tight">{name || 'My Dashboard'}</p>
+              <p className="text-[10px] text-slate-500 leading-tight mt-0.5">Personal command center</p>
+            </div>
           </div>
-          <button onClick={onClose} className="lg:hidden p-1.5 rounded-xl hover:bg-slate-800 text-slate-400 transition-colors">
+          <button onClick={onClose} className="lg:hidden p-1.5 rounded-xl hover:bg-slate-800 text-slate-400 transition-colors flex-shrink-0">
             <X size={16} />
           </button>
         </div>
 
-        {/* Nav */}
-        <nav className="flex-1 p-3 space-y-0.5 overflow-y-auto mt-1">
-          {NAV.map(({ to, icon: Icon, label, activeClass }) => (
-            <NavLink
-              key={to}
-              to={to}
-              end={to === '/'}
-              onClick={onClose}
-              className={({ isActive }) =>
-                `flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium transition-all duration-150 ${
-                  isActive
-                    ? activeClass
-                    : 'text-slate-400 hover:text-white hover:bg-slate-800/70 border border-transparent'
-                }`
-              }
-            >
-              {({ isActive }) => (
-                <>
-                  <Icon size={18} />
-                  {label}
-                </>
-              )}
-            </NavLink>
+        {/* Grouped nav */}
+        <nav className="flex-1 px-3 py-3 overflow-y-auto space-y-4">
+          {NAV_GROUPS.map(group => (
+            <div key={group.label}>
+              <p className="section-label px-2 mb-1.5">{group.label}</p>
+              <div className="space-y-0.5">
+                {group.items.map(({ to, end, icon: Icon, label, activeClass, accentColor }) => (
+                  <NavLink
+                    key={to}
+                    to={to}
+                    end={end}
+                    onClick={onClose}
+                    className={({ isActive }) =>
+                      `flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-150 ${
+                        isActive
+                          ? activeClass
+                          : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+                      }`
+                    }
+                    style={({ isActive }) => isActive ? { borderLeft: `3px solid ${accentColor}` } : { borderLeft: '3px solid transparent' }}
+                  >
+                    {({ isActive }) => (
+                      <>
+                        <Icon size={17} />
+                        <span>{label}</span>
+                      </>
+                    )}
+                  </NavLink>
+                ))}
+              </div>
+            </div>
           ))}
         </nav>
 
-        {/* Settings */}
-        <div className="p-3 border-t border-slate-800/60">
+        {/* Divider + Settings */}
+        <div className="px-3 pb-3 border-t border-slate-800/50 pt-3">
           <NavLink
             to="/settings"
             onClick={onClose}
             className={({ isActive }) =>
-              `flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium transition-all duration-150 border ${
+              `flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-150 ${
                 isActive
-                  ? 'bg-slate-700/60 text-white border-slate-600/50'
-                  : 'text-slate-400 hover:text-white hover:bg-slate-800/70 border-transparent'
+                  ? 'bg-slate-700/50 text-slate-200'
+                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
               }`
             }
+            style={{ borderLeft: '3px solid transparent' }}
           >
-            <Settings size={18} />
+            <Settings size={17} />
             Settings
           </NavLink>
         </div>

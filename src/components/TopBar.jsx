@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Menu, Plus, Flame, HelpCircle, RefreshCw, Zap } from 'lucide-react';
+import { Menu, Flame, RefreshCw, Zap, BotMessageSquare } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { calcStreak, today } from '../lib/utils';
 import { localGet, onSyncStatus, forceSync } from '../lib/storage';
@@ -172,74 +172,77 @@ function DetectionBadge() {
   const { badgeCount, badgeSeverity, scanning } = useDetections();
   if (badgeCount === 0 && !scanning) return null;
 
-  const color = badgeSeverity === 'critical' ? 'bg-red-500 text-white' :
-                badgeSeverity === 'warning'  ? 'bg-amber-500 text-white' :
-                badgeSeverity === 'info'     ? 'bg-blue-500 text-white' :
-                'bg-indigo-500 text-white';
+  const dotColor = badgeSeverity === 'critical' ? 'bg-red-500' :
+                   badgeSeverity === 'warning'  ? 'bg-amber-400' : 'bg-sky-400';
 
   return (
-    <a href="/" className="relative flex items-center gap-1 px-2 py-1.5 rounded-xl bg-slate-800/80 border border-slate-700/40 group"
+    <a href="/" className="flex items-center gap-1.5 text-slate-400 hover:text-slate-200 transition-colors py-1.5 px-1"
       title={`${badgeCount} active detection${badgeCount !== 1 ? 's' : ''}`}>
-      <Zap size={13} className={scanning ? 'text-indigo-400 animate-pulse' : 'text-indigo-400'} />
-      {badgeCount > 0 && (
-        <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full min-w-[18px] text-center leading-none ${color}`}>
-          {badgeCount}
-        </span>
-      )}
+      <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${dotColor} ${scanning ? 'animate-pulse' : ''}`} />
+      <span className="text-xs font-medium tabular-nums">{badgeCount} Alert{badgeCount !== 1 ? 's' : ''}</span>
     </a>
   );
 }
 
+// ── Overseer header button ────────────────────────────────────────────────────
+// Fires a custom event that Overseer listens for, avoiding prop drilling.
+function OverseerHeaderBtn() {
+  const { badgeSeverity } = useDetections();
+  const hasCritical = badgeSeverity === 'critical';
+
+  function open() {
+    window.dispatchEvent(new CustomEvent('overseer:open'));
+  }
+
+  return (
+    <button onClick={open}
+      title="Ask Overseer"
+      className={`relative p-1.5 rounded-xl border border-slate-700/40 text-slate-400 hover:text-indigo-400 hover:bg-indigo-500/10 hover:border-indigo-500/30 transition-all duration-150 ${hasCritical ? 'text-indigo-400 border-indigo-500/30' : ''}`}
+    >
+      <BotMessageSquare size={17} />
+      {hasCritical && (
+        <span className="absolute top-0.5 right-0.5 w-1.5 h-1.5 rounded-full bg-red-500" />
+      )}
+    </button>
+  );
+}
+
 export function TopBar({ onMenuClick }) {
-  const { state }     = useApp();
-  const { score }     = computeDailyScore();
-  const streak        = calcStreak(state.loginDates);
-  const [qaOpen,    setQaOpen]    = useState(false);
-  const [scoreOpen, setScoreOpen] = useState(false);
-  const scoreColor = score >= 70 ? 'text-emerald-400' : score >= 40 ? 'text-amber-400' : 'text-red-400';
+  const { state } = useApp();
+  const streak    = calcStreak(state.loginDates);
 
   return (
     <>
-      <header className="fixed top-0 left-0 right-0 lg:left-64 z-20 h-14 bg-slate-950/95 backdrop-blur-md border-b border-slate-800/60 flex items-center px-4 gap-3">
-        <button onClick={onMenuClick} className="lg:hidden p-1.5 rounded-xl hover:bg-slate-800 text-slate-400 transition-colors">
+      <header className="fixed top-0 left-0 right-0 lg:left-64 z-20 h-14 bg-slate-950/95 backdrop-blur-md border-b border-slate-800/50 flex items-center px-4 gap-2">
+        <button onClick={onMenuClick} className="lg:hidden p-1.5 rounded-xl hover:bg-slate-800/70 text-slate-400 transition-colors flex-shrink-0">
           <Menu size={18} />
         </button>
 
         <LiveClock />
         <div className="flex-1" />
 
+        {/* Sync status — minimal */}
         <SyncIndicator />
 
+        {/* Detection alerts */}
         <DetectionBadge />
 
-        <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-slate-800/80 border border-slate-700/40">
-          <Flame size={13} className="text-orange-400" />
-          <span className="text-xs font-semibold text-white">{streak}</span>
-          <span className="text-xs text-slate-400 hidden md:inline">day streak</span>
-        </div>
+        {/* Streak */}
+        {streak > 0 && (
+          <div className="hidden sm:flex items-center gap-1 text-slate-400 py-1.5 px-1">
+            <Flame size={13} className="text-orange-400 flex-shrink-0" />
+            <span className="text-xs font-semibold text-orange-400">{streak}</span>
+          </div>
+        )}
 
-        <div className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-slate-800/80 border border-slate-700/40">
-          <span className="text-xs text-slate-400">Score</span>
-          <span className={`text-sm font-bold tabular-nums ${scoreColor}`}>{score}</span>
-          <button onClick={() => setScoreOpen(true)} className="text-slate-600 hover:text-slate-300 transition-colors">
-            <HelpCircle size={13} />
-          </button>
-        </div>
-
+        {/* Search + Notifications */}
         <GlobalSearch />
         <NotificationCenter />
 
-        <button onClick={() => setQaOpen(true)}
-          className="flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-500 text-white px-3 py-1.5 rounded-xl text-sm font-medium transition-all duration-150 active:scale-[0.97] shadow-sm hover:shadow-indigo-500/25">
-          <Plus size={14} />
-          <span className="hidden sm:inline">Quick Add</span>
-        </button>
+        {/* Overseer AI icon button */}
+        <OverseerHeaderBtn />
       </header>
 
-      <QuickAddModal open={qaOpen} onClose={() => setQaOpen(false)} />
-      <Modal open={scoreOpen} onClose={() => setScoreOpen(false)} title="Daily Score Breakdown" size="sm">
-        <ScoreModal />
-      </Modal>
     </>
   );
 }

@@ -4,7 +4,6 @@ import NetWorth from './NetWorth';
 import BalanceSheet from './BalanceSheet';
 import Income from './Income';
 import Forecast from './Forecast';
-import Projects from './Projects';
 import WealthfrontHYSA from './WealthfrontHYSA';
 
 const TABS = [
@@ -14,7 +13,6 @@ const TABS = [
   { id: 'Balance Sheet',label: 'Balance Sheet'},
   { id: 'Income',       label: 'Income'       },
   { id: 'Forecast',     label: 'Forecast'     },
-  { id: 'Projects',     label: 'Projects'     },
 ];
 
 function FinanceModuleInner() {
@@ -50,7 +48,6 @@ function FinanceModuleInner() {
         {tab === 'Balance Sheet' && <BalanceSheet />}
         {tab === 'Income'        && <Income />}
         {tab === 'Forecast'      && <Forecast onNavigateToIncome={() => setTab('Income')} />}
-        {tab === 'Projects'      && <Projects />}
       </div>
     </div>
   );
