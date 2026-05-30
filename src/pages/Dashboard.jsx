@@ -826,8 +826,10 @@ export default function Dashboard() {
   const budgets     = localGet('fin_budgets') || [];
   const month       = t.slice(0,7);
   const monthTxns   = txns.filter(tx => tx.date?.startsWith(month));
+  // Exclude inter-account transfers from all spend calculations
+  const isRealExpense = (tx) => tx.type !== 'income' && !tx.is_transfer && tx.category !== 'Transfer' && tx.type !== 'transfer';
   const income      = monthTxns.filter(tx => tx.type==='income').reduce((s,tx)=>s+tx.amount,0);
-  const expenses    = monthTxns.filter(tx => tx.type!=='income').reduce((s,tx)=>s+tx.amount,0);
+  const expenses    = monthTxns.filter(isRealExpense).reduce((s,tx)=>s+tx.amount,0);
   const { netWorth, snapshots } = useFinance();
   const prevNWSnap  = [...snapshots].filter(s => s.date && !s.date.startsWith(t.slice(0,7))).sort((a,b)=>b.date.localeCompare(a.date))[0] || null;
   const nwMoMChange = prevNWSnap != null ? netWorth - prevNWSnap.net_worth : null;
@@ -930,7 +932,7 @@ export default function Dashboard() {
   const sleepHColor = lastSleep ? (lastSleep.hours >= 7 ? 'text-green-400' : lastSleep.hours >= 6 ? 'text-yellow-400' : 'text-red-400') : 'text-gray-500';
 
   // ── Finance enrichment ────────────────────────────────────────────────────
-  const spendByCat = monthTxns.filter(tx=>tx.type!=='income').reduce((acc,tx)=>{ acc[tx.category]=(acc[tx.category]||0)+(tx.amount||0); return acc; },{});
+  const spendByCat = monthTxns.filter(isRealExpense).reduce((acc,tx)=>{ acc[tx.category]=(acc[tx.category]||0)+(tx.amount||0); return acc; },{});
   const top3Spend  = Object.entries(spendByCat).sort((a,b)=>b[1]-a[1]).slice(0,3).map(([cat,amt])=>({
     cat, amt,
     pct: expenses>0 ? Math.round(amt/expenses*100) : 0,

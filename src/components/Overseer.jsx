@@ -9,7 +9,6 @@ const API_KEY    = import.meta.env.VITE_ANTHROPIC_API_KEY;
 const CLAUDE_URL = 'https://api.anthropic.com/v1/messages';
 const CHAT_KEY   = 'hdash_overseer_chat';
 const MAX_HIST   = 30;
-const APP_ID     = 'hdash';
 
 const QUICK_CHIPS = [
   'How am I doing today?',
@@ -54,11 +53,10 @@ async function buildOverseerContext() {
   if (supabase) {
     try {
       const { data: rows } = await supabase
-        .from('app_data')
-        .select('key, payload')
-        .eq('device_id', APP_ID)
+        .from('module_data')
+        .select('key, value')
         .in('key', DATA_KEYS);
-      rows?.forEach(r => { if (r.payload != null) d[r.key] = r.payload; });
+      rows?.forEach(r => { if (r.value != null) d[r.key] = r.value; });
     } catch { /* fall through to localStorage values already set above */ }
   }
 
@@ -128,21 +126,22 @@ async function buildOverseerContext() {
   const workoutsThisWeek = [...workouts, ...cardio].filter(w => (w.date || '') >= sevenAgo);
 
   const yearStart  = `${new Date().getFullYear()}-01-01`;
+  const isNotTransfer = (tx) => !tx.is_transfer && tx.category !== 'Transfer' && tx.type !== 'transfer';
   const ytdTxns    = txns.filter(tx => (tx.date || '') >= yearStart);
-  const ytdSpend   = ytdTxns.filter(tx => tx.type !== 'income').reduce((s, tx) => s + (tx.amount || 0), 0);
+  const ytdSpend   = ytdTxns.filter(tx => tx.type !== 'income' && isNotTransfer(tx)).reduce((s, tx) => s + (tx.amount || 0), 0);
   const ytdIncome  = ytdTxns.filter(tx => tx.type === 'income').reduce((s, tx) => s + (tx.amount || 0), 0);
   const byMonth    = ytdTxns.reduce((acc, tx) => {
     const m = (tx.date || '').slice(0, 7);
     if (!acc[m]) acc[m] = { spend: 0, income: 0 };
-    if (tx.type !== 'income') acc[m].spend += tx.amount || 0;
-    else acc[m].income += tx.amount || 0;
+    if (tx.type === 'income') acc[m].income += tx.amount || 0;
+    else if (isNotTransfer(tx)) acc[m].spend += tx.amount || 0;
     return acc;
   }, {});
   const totalAssets = assets.reduce((s, a) => s + (a.value || 0), 0);
   const totalLiabs  = liabs.reduce((s, l) => s + (l.balance || 0), 0);
   const netWorth    = totalAssets - totalLiabs;
   const totalDebt   = debts.reduce((s, dbt) => s + (dbt.balance || 0), 0);
-  const spendByCat  = ytdTxns.filter(tx => tx.type !== 'income').reduce((acc, tx) => {
+  const spendByCat  = ytdTxns.filter(tx => tx.type !== 'income' && isNotTransfer(tx)).reduce((acc, tx) => {
     acc[tx.category] = (acc[tx.category] || 0) + (tx.amount || 0);
     return acc;
   }, {});

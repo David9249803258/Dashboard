@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import Accounts from './Accounts';
 import NetWorth from './NetWorth';
 import BalanceSheet from './BalanceSheet';
 import Income from './Income';
@@ -7,8 +8,9 @@ import Projects from './Projects';
 import WealthfrontHYSA from './WealthfrontHYSA';
 
 const TABS = [
+  { id: 'Accounts',     label: '🏦 Accounts'  },
   { id: 'Net Worth',    label: 'Net Worth'    },
-  { id: 'HYSA',         label: '🏦 HYSA'      },
+  { id: 'HYSA',         label: 'HYSA'         },
   { id: 'Balance Sheet',label: 'Balance Sheet'},
   { id: 'Income',       label: 'Income'       },
   { id: 'Forecast',     label: 'Forecast'     },
@@ -42,6 +44,7 @@ function FinanceModuleInner() {
       </div>
 
       <div className="page-enter" key={tab}>
+        {tab === 'Accounts'      && <Accounts />}
         {tab === 'Net Worth'     && <NetWorth />}
         {tab === 'HYSA'          && <WealthfrontHYSA />}
         {tab === 'Balance Sheet' && <BalanceSheet />}

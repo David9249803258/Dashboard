@@ -4,7 +4,7 @@ import { Card, CardTitle } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { Input, Select } from '../components/ui/Input';
 import { Modal } from '../components/ui/Modal';
-import { localGet, localSet } from '../lib/storage';
+import { localGet, localSet, forceSync, checkConnection } from '../lib/storage';
 import { today } from '../lib/utils';
 import { supabase } from '../services/supabase';
 import {
@@ -637,6 +637,34 @@ export default function Settings() {
                 <div><p className="text-sm font-medium text-red-300">Reset All Data</p><p className="text-xs text-gray-400">Permanently delete everything</p></div>
                 <Button size="sm" variant="danger" onClick={()=>setResetOpen(true)}>Reset</Button>
               </div>
+
+              {/* Force Sync */}
+              {supabase && (() => {
+                const [syncing, setSyncing] = useState(false);
+                const [syncMsg, setSyncMsg] = useState('');
+                async function handleForceSync() {
+                  setSyncing(true); setSyncMsg('');
+                  try {
+                    await forceSync();
+                    setSyncMsg('✓ All data synced to cloud');
+                    setTimeout(() => setSyncMsg(''), 4000);
+                  } catch {
+                    setSyncMsg('Sync failed — check connection');
+                  }
+                  setSyncing(false);
+                }
+                return (
+                  <div className="flex items-center justify-between p-3 bg-sky-900/20 border border-sky-800/50 rounded-xl">
+                    <div>
+                      <p className="text-sm font-medium text-sky-300">Force Sync</p>
+                      <p className="text-xs text-gray-400">{syncMsg || 'Push all local data to Supabase cloud'}</p>
+                    </div>
+                    <Button size="sm" onClick={handleForceSync} disabled={syncing}>
+                      {syncing ? 'Syncing…' : '🔄 Sync Now'}
+                    </Button>
+                  </div>
+                );
+              })()}
 
               {/* PWA install */}
               <div className="flex items-center justify-between p-3 bg-indigo-900/20 border border-indigo-800/50 rounded-xl">

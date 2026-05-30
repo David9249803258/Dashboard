@@ -9,7 +9,6 @@
 import { supabase } from './supabase';
 import { localGet } from '../lib/storage';
 
-const APP_ID = 'hdash';
 
 const DATA_KEYS = [
   'health_sleep', 'health_water', 'health_workouts', 'health_cardio',
@@ -29,11 +28,10 @@ async function fetchData() {
   if (supabase) {
     try {
       const { data: rows } = await supabase
-        .from('app_data')
-        .select('key, payload')
-        .eq('device_id', APP_ID)
+        .from('module_data')
+        .select('key, value')
         .in('key', DATA_KEYS);
-      rows?.forEach(r => { if (r.payload != null) d[r.key] = r.payload; });
+      rows?.forEach(r => { if (r.value != null) d[r.key] = r.value; });
     } catch { /* use localStorage values */ }
   }
   return d;

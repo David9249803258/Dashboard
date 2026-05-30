@@ -478,15 +478,33 @@ export default function StatementImport({ open, onClose, initialFile = null, sta
     }
   }
 
+  // ── Transfer detection ────────────────────────────────────────────────────────
+  const TRANSFER_PATTERNS = [
+    'wealthfront', 'webull', 'zelle', 'ach transfer',
+    'capital one transfer', 'transfer to', 'transfer from',
+    'internal transfer', 'account transfer',
+  ];
+
+  function isTransferMerchant(merchant) {
+    const m = (merchant || '').toLowerCase();
+    return TRANSFER_PATTERNS.some(p => m.includes(p));
+  }
+
   function doImport() {
     const newImportId      = uuid();
     const duplicatesSkipped = parsedRows.filter(r => r._isDup).length;
-    const newTxns = parsedRows.map(r => ({
-      id: uuid(), date: r.date, amount: r.amount, type: r.type,
-      merchant: r.merchant, category: r.category, note: r.note || '',
-      source: 'import', import_id: newImportId,
-      createdAt: new Date().toISOString(),
-    }));
+    const newTxns = parsedRows.map(r => {
+      const transfer = isTransferMerchant(r.merchant);
+      return {
+        id: uuid(), date: r.date, amount: r.amount,
+        type:     transfer ? 'transfer' : r.type,
+        category: transfer ? 'Transfer'  : r.category,
+        merchant: r.merchant, note: r.note || '',
+        source: 'import', import_id: newImportId,
+        is_transfer: transfer,
+        createdAt: new Date().toISOString(),
+      };
+    });
     setTransactions(prev => [...prev, ...newTxns]);
     recordImport({ importId: newImportId, fileName, fileType: fileType || 'image', rows: parsedRows, importedCount: newTxns.length, duplicatesSkipped });
     const dates = parsedRows.map(r => r.date).filter(Boolean).sort();

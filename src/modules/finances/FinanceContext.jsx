@@ -45,6 +45,10 @@ export function FinanceProvider({ children }) {
 
   const currentMonth = today().slice(0, 7);
 
+  // Helper — true for real purchases (excludes transfers between accounts)
+  const isRealExpense = (t) =>
+    t.type === 'expense' && !t.is_transfer && t.category !== 'Transfer';
+
   const monthTxns = (monthStr = currentMonth) =>
     transactions.filter(t => t.date?.startsWith(monthStr));
 
@@ -52,7 +56,7 @@ export function FinanceProvider({ children }) {
     monthTxns(monthStr).filter(t => t.type === 'income').reduce((s, t) => s + t.amount, 0);
 
   const monthlyExpenses = (monthStr = currentMonth) =>
-    monthTxns(monthStr).filter(t => t.type === 'expense').reduce((s, t) => s + t.amount, 0);
+    monthTxns(monthStr).filter(isRealExpense).reduce((s, t) => s + t.amount, 0);
 
   const totalAssets      = assets.reduce((s, a) => s + (a.value || 0), 0);
   const totalLiabilities = liabilities.reduce((s, l) => s + (l.balance || 0), 0);
@@ -68,7 +72,7 @@ export function FinanceProvider({ children }) {
   const budgetAdherence = (() => {
     let score = 25;
     budgets.forEach(b => {
-      const spent = monthTxns().filter(t => t.type === 'expense' && t.category === b.category)
+      const spent = monthTxns().filter(t => isRealExpense(t) && t.category === b.category)
         .reduce((s, t) => s + t.amount, 0);
       if (spent > b.monthly_limit) score -= 5;
     });
@@ -106,7 +110,7 @@ export function FinanceProvider({ children }) {
 
   const healthBreakdown = [
     { label: 'Savings Rate',     score: savingsRateScore,   max: 30, detail: `${savingsRate}% savings rate` },
-    { label: 'Budget Adherence', score: budgetAdherence,    max: 25, detail: `${budgets.filter(b => { const s = monthTxns().filter(t=>t.type==='expense'&&t.category===b.category).reduce((x,t)=>x+t.amount,0); return s <= b.monthly_limit; }).length}/${budgets.length} categories on budget` },
+    { label: 'Budget Adherence', score: budgetAdherence,    max: 25, detail: `${budgets.filter(b => { const s = monthTxns().filter(t=>isRealExpense(t)&&t.category===b.category).reduce((x,t)=>x+t.amount,0); return s <= b.monthly_limit; }).length}/${budgets.length} categories on budget` },
     { label: 'Debt / Income',    score: debtToIncomeScore,  max: 25, detail: totalDebt === 0 ? 'No debt' : `$${totalDebt.toFixed(0)} total debt` },
     { label: 'Emergency Fund',   score: emergencyFundScore, max: 20, detail: (() => { const c=assets.filter(a=>a.type==='Cash').reduce((s,a)=>s+a.value,0); const e=monthlyExpenses()||1; return `${(c/e).toFixed(1)} months covered`; })() },
   ];
