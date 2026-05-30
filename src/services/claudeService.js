@@ -30,33 +30,95 @@ async function callClaude({ systemPrompt, userContent, maxTokens = 1000 }) {
   return data.content?.[0]?.text || '';
 }
 
-// ── Meal photo analysis ───────────────────────────────────────────────────────
-const MEAL_SYSTEM = `You are a nutrition expert. The user has uploaded a photo of their meal. Do two things:
-1. Identify each food item visible and return a JSON array with this exact structure, no markdown, no explanation:
-[{"name": string, "portion": string, "calories": number, "protein": number, "carbs": number, "fat": number, "fiber": number, "sodium": number, "sugar": number, "vitamin_c": number, "iron": number, "calcium": number}]
-2. After the JSON array, on a new line write RECOMMENDATIONS: followed by 2-3 sentences identifying which macros or micros the user is likely still short on today based on a standard 2000 kcal diet, and suggest one specific whole food they could eat next to address the biggest gap.`;
+// ── Meal photo analysis (expanded micronutrient version) ──────────────────────
+const MEAL_PHOTO_PROMPT = `Analyse this meal photo and return ONLY a valid JSON object, no markdown, no backticks, no explanation:
+{
+  "meal_name": "descriptive name of the whole meal",
+  "foods": [
+    {
+      "name": "food item name",
+      "portion": "estimated portion size",
+      "calories": 0,
+      "protein_g": 0,
+      "carbs_g": 0,
+      "fat_g": 0,
+      "fiber_g": 0,
+      "sodium_mg": 0,
+      "sugar_g": 0,
+      "vitamin_c_mg": 0,
+      "vitamin_d_mcg": 0,
+      "vitamin_b12_mcg": 0,
+      "iron_mg": 0,
+      "calcium_mg": 0,
+      "potassium_mg": 0,
+      "magnesium_mg": 0,
+      "zinc_mg": 0,
+      "omega3_g": 0
+    }
+  ],
+  "totals": {
+    "calories": 0, "protein_g": 0, "carbs_g": 0, "fat_g": 0, "fiber_g": 0,
+    "sodium_mg": 0, "sugar_g": 0, "vitamin_c_mg": 0, "vitamin_d_mcg": 0,
+    "vitamin_b12_mcg": 0, "iron_mg": 0, "calcium_mg": 0, "potassium_mg": 0,
+    "magnesium_mg": 0, "zinc_mg": 0, "omega3_g": 0
+  },
+  "confidence": "high",
+  "notes": "any uncertainty about portions or items"
+}
+Estimate portions from visual cues. Be specific about every visible food item. If confidence is low, still provide best estimates.`;
 
 export async function analyzeMealPhoto(base64Image, mimeType = 'image/jpeg') {
-  const text = await callClaude({
-    systemPrompt: MEAL_SYSTEM,
-    userContent: [
-      { type: 'image', source: { type: 'base64', media_type: mimeType, data: base64Image } },
-      { type: 'text',  text: 'Please analyze this meal.' },
-    ],
-    maxTokens: 1000,
+  if (!API_KEY) throw new Error('VITE_ANTHROPIC_API_KEY not set');
+
+  const res = await fetch(BASE, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': API_KEY,
+      'anthropic-version': '2023-06-01',
+      'anthropic-dangerous-direct-browser-access': 'true',
+    },
+    body: JSON.stringify({
+      model: 'claude-sonnet-4-5',
+      max_tokens: 2000,
+      messages: [{
+        role: 'user',
+        content: [
+          { type: 'image', source: { type: 'base64', media_type: mimeType, data: base64Image } },
+          { type: 'text',  text: MEAL_PHOTO_PROMPT },
+        ],
+      }],
+    }),
   });
 
-  const recIdx = text.indexOf('RECOMMENDATIONS:');
-  const jsonPart = recIdx > -1 ? text.slice(0, recIdx).trim() : text.trim();
-  const recPart  = recIdx > -1 ? text.slice(recIdx + 'RECOMMENDATIONS:'.length).trim() : '';
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error?.message || `API error ${res.status}`);
+  }
 
-  let foods = [];
-  try {
-    const match = jsonPart.match(/\[[\s\S]*\]/);
-    if (match) foods = JSON.parse(match[0]);
-  } catch { /* fall through */ }
+  const data = await res.json();
+  const text = data.content?.[0]?.text?.trim() || '';
 
-  return { foods, recommendations: recPart };
+  // Try full JSON object first (new format), fall back to array (legacy format)
+  const objMatch = text.match(/\{[\s\S]*\}/);
+  if (objMatch) {
+    try {
+      const parsed = JSON.parse(objMatch[0]);
+      if (parsed.foods) return parsed; // new format
+      // Legacy array wrapped in object — shouldn't happen but handle gracefully
+    } catch {}
+  }
+
+  // Legacy fallback: array format
+  const arrMatch = text.match(/\[[\s\S]*\]/);
+  if (arrMatch) {
+    try {
+      const foods = JSON.parse(arrMatch[0]);
+      return { meal_name: 'Meal', foods, totals: null, confidence: 'medium', notes: '' };
+    } catch {}
+  }
+
+  throw new Error('Could not parse meal analysis response');
 }
 
 // ── Appearance analysis ───────────────────────────────────────────────────────

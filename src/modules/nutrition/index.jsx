@@ -1,16 +1,17 @@
 import { useState, useMemo } from 'react';
-import { Info, Droplets, ExternalLink, X, Plus } from 'lucide-react';
+import { Info, Droplets, X } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useModuleData } from '../../lib/useModuleData';
 import { supabase } from '../../services/supabase';
 import { today } from '../../lib/utils';
-import { localGet, localSet } from '../../lib/storage';
-import { ProgressBar } from '../../components/ui/ProgressBar';
+import { localGet, localSet, setData } from '../../lib/storage';
 import MealSection from './MealSection';
 import MacroProgress from './MacroProgress';
 import MicroPanel from './MicroPanel';
 import WeeklyReport from './WeeklyReport';
 import NutritionSettings from './NutritionSettings';
+import NutritionDashboard from './NutritionDashboard';
+import { calculateTargets, sumTodayTotals, DEFAULT_TARGETS } from '../../services/nutritionTargets';
 
 const MEAL_TYPES = ['Breakfast', 'Lunch', 'Dinner', 'Snacks'];
 const TABS       = ['Log', 'Macros', 'Micros', 'Weekly', 'Settings'];
@@ -24,6 +25,9 @@ async function syncEntryToSupabase(entry) {
       portion_size: entry.portionSize, calories: entry.calories, protein: entry.protein,
       carbs: entry.carbs, fat: entry.fat, fiber: entry.fiber, sodium: entry.sodium,
       sugar: entry.sugar, vitamin_c: entry.vitaminC, iron: entry.iron, calcium: entry.calcium,
+      vitamin_d_mcg: entry.vitaminD, vitamin_b12_mcg: entry.vitaminB12,
+      potassium_mg: entry.potassium, magnesium_mg: entry.magnesium,
+      zinc_mg: entry.zinc, omega3_g: entry.omega3, source: entry.source || 'manual',
     });
   } catch {}
 }
@@ -41,14 +45,40 @@ export default function NutritionModule() {
       .filter(e => { if (seen.has(e.foodName)) return false; seen.add(e.foodName); return true; }).slice(0,20);
   }, [logs]);
 
+  // Personalized targets from profile
+  const nutritionProfile = localGet('nutrition_profile') || {};
+  const targets = useMemo(() => {
+    const saved = localGet('nutrition_targets');
+    if (saved) return saved;
+    return calculateTargets(nutritionProfile);
+  }, [nutritionProfile]);
+
   function addEntry(entry) { setLogs(prev=>[...prev,entry]); syncEntryToSupabase(entry); }
   function removeEntry(id) { setLogs(prev=>prev.filter(l=>l.id!==id)); }
 
-  const totals = useMemo(() => {
-    const s = f => +todayLogs.reduce((acc,e)=>acc+(e[f]||0),0).toFixed(1);
-    return { calories:+s('calories').toFixed(0), protein:s('protein'), carbs:s('carbs'), fat:s('fat'),
-      fiber:s('fiber'), sodium:s('sodium'), sugar:s('sugar'), vitaminC:s('vitaminC'), iron:s('iron'), calcium:s('calcium') };
-  }, [todayLogs]);
+  // Expanded totals including micronutrients
+  const totals = useMemo(() => sumTodayTotals(todayLogs), [todayLogs]);
+
+  // Also compute legacy format for existing components
+  const legacyTotals = useMemo(() => ({
+    calories: totals.calories, protein: totals.protein_g, carbs: totals.carbs_g, fat: totals.fat_g,
+    fiber: totals.fiber_g, sodium: totals.sodium_mg, sugar: totals.sugar_g,
+    vitaminC: totals.vitamin_c_mg, iron: totals.iron_mg, calcium: totals.calcium_mg,
+  }), [totals]);
+
+  // Next meal type (for recommendations)
+  const nextMeal = useMemo(() => {
+    const h = new Date().getHours();
+    if (h < 10) return 'Breakfast';
+    if (h < 14) return 'Lunch';
+    if (h < 19) return 'Dinner';
+    return 'Snacks';
+  }, []);
+
+  function quickLog(mealName) {
+    // Pre-fill the search with the meal name (scroll to Log tab)
+    setTab('Log');
+  }
 
   // Water integration
   const waterData = localGet('health_water') || {};
@@ -114,40 +144,34 @@ export default function NutritionModule() {
       <div className="page-enter" key={tab}>
         {tab === 'Log' && (
           <div className="space-y-4">
-            {/* Calorie goal progress bar */}
-            {settings.calorieGoal > 0 && (
-              <div className="p-3 bg-gray-900 border border-gray-800 rounded-xl">
-                <div className="flex justify-between text-xs mb-1.5">
-                  <span className="text-gray-400">Calories today</span>
-                  <span className="text-white font-semibold">{Math.round(totals.calories)} <span className="text-gray-500 font-normal">/ {settings.calorieGoal} kcal</span></span>
-                </div>
-                <ProgressBar value={totals.calories} max={settings.calorieGoal}
-                  color={totals.calories > settings.calorieGoal * 1.1 ? 'red' : totals.calories >= settings.calorieGoal * 0.8 ? 'green' : 'yellow'}/>
+            {/* Profile incomplete prompt */}
+            {!nutritionProfile.weight_kg && (
+              <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl text-xs text-amber-300">
+                Set your height, weight, and age in{' '}
+                <button onClick={() => setTab('Settings')} className="underline font-medium">Settings</button>
+                {' '}for personalized calorie and macro targets.
               </div>
             )}
-            {/* Compact macro summary */}
-            <div className="grid grid-cols-4 gap-2">
-              {[['Cals',Math.round(totals.calories),settings.calorieGoal||0,''],['Protein',totals.protein,settings.proteinGoal,'g'],['Carbs',totals.carbs,settings.carbsGoal,'g'],['Fat',totals.fat,settings.fatGoal,'g']].map(([label,val,goal,unit])=>{
-                const r = goal > 0 ? val/goal : 0;
-                const barColor = label==='Protein' ? (r>=0.9?'bg-green-500':r>=0.5?'bg-yellow-500':'bg-gray-600') : (r<=0.85?'bg-indigo-500':r<=1?'bg-yellow-500':'bg-red-500');
-                const textColor = label==='Protein' ? (r>=0.9?'text-green-400':r>=0.5?'text-yellow-400':'text-gray-400') : (r<=0.85?'text-gray-400':r<=1?'text-yellow-400':'text-red-400');
-                return (
-                  <div key={label} className="bg-gray-900 border border-gray-800 rounded-xl p-2.5 text-center">
-                    <p className={`text-sm font-bold tabular-nums ${textColor}`}>{val}{unit}</p>
-                    <p className="text-xs text-gray-500">{label}</p>
-                    {goal>0&&<div className="mt-1 h-1 bg-gray-800 rounded-full overflow-hidden"><div className={`h-full rounded-full ${barColor}`} style={{width:`${Math.min(100,r*100)}%`}}/></div>}
-                  </div>
-                );
-              })}
-            </div>
-            {MEAL_TYPES.map(meal=>(
-              <MealSection key={meal} mealType={meal} entries={todayLogs.filter(l=>l.mealType===meal)}
-                recentFoods={recentFoods} onAdd={addEntry} onRemove={removeEntry}/>
+
+            {/* Daily nutrition dashboard (ring + bars + micronutrients + timeline) */}
+            <NutritionDashboard
+              totals={totals}
+              targets={targets}
+              todayLogs={todayLogs}
+              onRemove={removeEntry}
+              nextMeal={nextMeal}
+              onQuickLog={quickLog}
+            />
+
+            {/* Meal entry sections */}
+            {MEAL_TYPES.map(meal => (
+              <MealSection key={meal} mealType={meal} entries={todayLogs.filter(l => l.mealType === meal)}
+                recentFoods={recentFoods} onAdd={addEntry} onRemove={removeEntry} />
             ))}
           </div>
         )}
-        {tab === 'Macros'   && <MacroProgress totals={totals} settings={settings}/>}
-        {tab === 'Micros'   && <MicroPanel    totals={totals}/>}
+        {tab === 'Macros'   && <MacroProgress totals={legacyTotals} settings={settings}/>}
+        {tab === 'Micros'   && <MicroPanel    totals={legacyTotals}/>}
         {tab === 'Weekly'   && <WeeklyReport  logs={logs} calorieGoal={settings.calorieGoal}/>}
         {tab === 'Settings' && <NutritionSettings settings={settings} onSave={setSettings}/>}
       </div>

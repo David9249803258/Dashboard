@@ -3,6 +3,8 @@ import { useApp } from '../../context/AppContext';
 import { Card, CardTitle } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Input, Select } from '../../components/ui/Input';
+import { calculateTargets } from '../../services/nutritionTargets';
+import { localGet, setData } from '../../lib/storage';
 
 const PRESETS = [
   { label:'Maintenance',   cals:null, protein:null, carbs:null, fat:null }, // TDEE-calculated
@@ -67,6 +69,31 @@ export default function NutritionSettings({ settings, onSave }) {
     setForm(p => ({ ...p, calorieGoal: targetCals, proteinGoal: proteinG, carbsGoal: carbG, fatGoal: fatG }));
   }
 
+  // Nutrition profile state
+  const [profile, setProfile] = useState(() => localGet('nutrition_profile') || {
+    weight_kg: '', height_cm: state.profile?.heightCm || '', age: '', gender: state.profile?.gender || 'male',
+    activity_level: state.profile?.activityLevel || 'moderate', goal: 'maintain',
+  });
+  const [profileSaved, setProfileSaved] = useState(false);
+  const setP = (k, v) => setProfile(p => ({ ...p, [k]: v }));
+
+  function saveProfile() {
+    const p = {
+      ...profile,
+      weight_kg:  +profile.weight_kg  || 0,
+      height_cm:  +profile.height_cm  || (state.profile?.heightCm || 175),
+      age:        +profile.age        || 0,
+    };
+    setData('nutrition_profile', p);
+    const targets = calculateTargets(p);
+    setData('nutrition_targets', targets);
+    setProfileSaved(true); setTimeout(() => setProfileSaved(false), 2500);
+    // Sync calorie goal to settings
+    if (targets.calories) {
+      onSave({ ...form, calorieGoal: targets.calories, proteinGoal: targets.protein_g, carbsGoal: targets.carbs_g, fatGoal: targets.fat_g });
+    }
+  }
+
   function saveSettings() {
     onSave({ calorieGoal: +form.calorieGoal || 2000, proteinGoal: +form.proteinGoal || 150, carbsGoal: +form.carbsGoal || 250, fatGoal: +form.fatGoal || 65 });
     setSaved(true); setTimeout(() => setSaved(false), 2000);
@@ -74,6 +101,45 @@ export default function NutritionSettings({ settings, onSave }) {
 
   return (
     <div className="space-y-4">
+
+      {/* Nutrition Profile for personalised targets */}
+      <Card>
+        <CardTitle>Nutrition Profile</CardTitle>
+        <p className="text-xs text-gray-500 mb-3">Used to calculate your personalised calorie and micronutrient targets.</p>
+        <div className="grid grid-cols-2 gap-3 mb-3">
+          <Input label="Weight (kg)" type="number" step="0.1" placeholder="e.g. 80"
+            value={profile.weight_kg} onChange={e => setP('weight_kg', e.target.value)} />
+          <Input label="Height (cm)" type="number" placeholder="e.g. 180"
+            value={profile.height_cm} onChange={e => setP('height_cm', e.target.value)} />
+          <Input label="Age" type="number" placeholder="e.g. 28"
+            value={profile.age} onChange={e => setP('age', e.target.value)} />
+          <Select label="Gender" value={profile.gender} onChange={e => setP('gender', e.target.value)}>
+            <option value="male">Male</option>
+            <option value="female">Female</option>
+            <option value="other">Other</option>
+          </Select>
+          <Select label="Activity Level" value={profile.activity_level} onChange={e => setP('activity_level', e.target.value)} className="col-span-2">
+            <option value="sedentary">Sedentary (desk job, no exercise)</option>
+            <option value="light">Lightly active (1–3 days/week)</option>
+            <option value="moderate">Moderately active (3–5 days/week)</option>
+            <option value="active">Very active (6–7 days/week)</option>
+            <option value="very_active">Athlete (2× per day)</option>
+          </Select>
+        </div>
+        <p className="text-xs text-gray-400 font-medium mb-2">Goal</p>
+        <div className="flex gap-2 mb-3 flex-wrap">
+          {[['maintain','⚖️ Maintain weight'],['lose','📉 Lose weight (−500 kcal)'],['gain','📈 Gain muscle (+300 kcal)']].map(([v,l]) => (
+            <label key={v} className={`flex items-center gap-2 px-3 py-2 rounded-xl border cursor-pointer text-sm transition-colors ${profile.goal===v?'border-indigo-500 bg-indigo-500/10 text-white':'border-gray-700 text-gray-400 hover:border-gray-500'}`}>
+              <input type="radio" name="goal" value={v} checked={profile.goal===v} onChange={e=>setP('goal',e.target.value)} className="sr-only" />{l}
+            </label>
+          ))}
+        </div>
+        <div className="flex items-center gap-3">
+          <Button onClick={saveProfile}>Save & Recalculate Targets</Button>
+          {profileSaved && <span className="text-xs text-green-400">✓ Targets updated!</span>}
+        </div>
+      </Card>
+
       {/* TDEE Calculator */}
       <Card>
         <CardTitle>TDEE Calculator (Mifflin-St Jeor)</CardTitle>

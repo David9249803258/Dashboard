@@ -1255,7 +1255,7 @@ export default function Dashboard() {
         </SummaryCard>
 
         <SummaryCard to="/nutrition" icon={UtensilsCrossed} color="bg-green-700" title="Nutrition"
-          actions={<ActionBtn label="+ Meal" onClick={()=>openQA('Meal')}/>}>
+          actions={<ActionBtn label="📸 Snap" onClick={()=>{window.location.href='/nutrition';}}/>}>
           <div className="space-y-2">
             <StatRow label="Calories today" value={String(Math.round(cals))} sub={calGoal?`/ ${calGoal} goal`:'kcal'}/>
             {calGoal>0 && <ProgressBar value={calPct} max={100} color={calPct>110?'red':calPct>=80?'green':'yellow'} />}
@@ -1269,8 +1269,16 @@ export default function Dashboard() {
                 <ProgressBar value={protPct} max={100} color={protPct>=80?'green':protPct>=50?'yellow':'red'} />
               </div>
             )}
-            <StatRow label="Meals logged" value={String([...new Set(todayNut.map(n=>n.mealType))].length)}/>
-            {/* Calorie sparkline */}
+            {/* Top missing nutrient */}
+            {(() => {
+              const natTargets = nutSet.proteinGoal > 0 ? { protein_g: nutSet.proteinGoal, vitamin_d_mcg: 20, iron_mg: 10, calcium_mg: 1000 } : {};
+              const vitD = todayNut.reduce((s,n)=>s+(n.vitaminD||0),0);
+              const iron = todayNut.reduce((s,n)=>s+(n.iron||0),0);
+              if (vitD < 10) return <p className="text-[10px] text-amber-400">⚠️ Low on Vitamin D</p>;
+              if (iron < 5) return <p className="text-[10px] text-amber-400">⚠️ Low on Iron</p>;
+              return null;
+            })()}
+            <StatRow label="Photo meals" value={String(todayNut.filter(n=>n.source==='photo_analysis').length)}/>
             <SparkBar data={calSpark} color="#22c55e" goalLine={calGoal} />
           </div>
         </SummaryCard>

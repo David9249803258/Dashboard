@@ -72,44 +72,93 @@ function ManualEntryForm({ mealType, onAdd, onCancel }) {
 }
 
 // ── Photo AI confirmation modal ───────────────────────────────────────────────
-function PhotoConfirmModal({ foods, recommendations, mealType, onConfirm, onClose }) {
-  const [items, setItems] = useState(foods.map(f=>({...f,_include:true})));
-  const updateItem = (i, k, v) => setItems(p=>p.map((x,idx)=>idx===i?{...x,[k]:v}:x));
+function PhotoConfirmModal({ result, mealType, onConfirm, onClose }) {
+  const { meal_name, foods = [], confidence = 'medium', notes = '' } = result;
+  const [items, setItems] = useState(foods.map(f => ({ ...f, _include: true })));
+  const upd = (i, k, v) => setItems(p => p.map((x, idx) => idx === i ? { ...x, [k]: v } : x));
+
+  const totals = items.filter(f => f._include).reduce(
+    (acc, f) => ({
+      cal:  acc.cal  + (+f.calories||0),
+      prot: acc.prot + (+f.protein_g||0),
+      carb: acc.carb + (+f.carbs_g||0),
+      fat:  acc.fat  + (+f.fat_g||0),
+    }),
+    { cal: 0, prot: 0, carb: 0, fat: 0 }
+  );
+
+  const confBadge = {
+    high:   { cls: 'bg-green-500/20 text-green-400 border-green-500/30',  label: '🟢 High confidence' },
+    medium: { cls: 'bg-amber-500/20 text-amber-400 border-amber-500/30',  label: '🟡 Medium confidence' },
+    low:    { cls: 'bg-red-500/20   text-red-400   border-red-500/30',    label: '🔴 Low confidence' },
+  }[confidence] || { cls: 'bg-gray-800 text-gray-400', label: '⚪ Unknown' };
 
   function confirm() {
     const t = today();
-    const entries = items.filter(f=>f._include).map(f=>({
-      id:uuid(), date:t, mealType, foodName:f.name, portionSize:f.portion||'serving',
-      calories:+f.calories||0, protein:+f.protein||0, carbs:+f.carbs||0, fat:+f.fat||0,
-      fiber:+f.fiber||0, sodium:+f.sodium||0, sugar:+f.sugar||0, vitaminC:+f.vitamin_c||0,
-      iron:+f.iron||0, calcium:+f.calcium||0, createdAt:new Date().toISOString(),
+    const entries = items.filter(f => f._include).map(f => ({
+      id: uuid(), date: t, mealType,
+      foodName:    f.name,
+      portionSize: f.portion || 'serving',
+      calories:    +f.calories    || 0,
+      protein:     +f.protein_g   || 0,
+      carbs:       +f.carbs_g     || 0,
+      fat:         +f.fat_g       || 0,
+      fiber:       +f.fiber_g     || 0,
+      sodium:      +f.sodium_mg   || 0,
+      sugar:       +f.sugar_g     || 0,
+      vitaminC:    +f.vitamin_c_mg  || 0,
+      vitaminD:    +f.vitamin_d_mcg || 0,
+      vitaminB12:  +f.vitamin_b12_mcg || 0,
+      iron:        +f.iron_mg     || 0,
+      calcium:     +f.calcium_mg  || 0,
+      potassium:   +f.potassium_mg || 0,
+      magnesium:   +f.magnesium_mg || 0,
+      zinc:        +f.zinc_mg     || 0,
+      omega3:      +f.omega3_g    || 0,
+      source:      'photo_analysis',
+      createdAt:   new Date().toISOString(),
     }));
-    onConfirm(entries, recommendations);
+    onConfirm(entries);
   }
 
   return (
     <div className="space-y-4">
-      <p className="text-xs text-gray-400">Review identified foods — edit or uncheck to exclude:</p>
-      <div className="space-y-2 max-h-64 overflow-y-auto">
-        {items.map((f,i)=>(
-          <div key={i} className={`flex items-start gap-2 p-2 rounded-lg border ${f._include?'border-gray-700 bg-gray-800':'border-gray-800 bg-gray-900 opacity-50'}`}>
-            <input type="checkbox" checked={f._include} onChange={e=>updateItem(i,'_include',e.target.checked)} className="mt-1"/>
+      {/* Confidence badge */}
+      <div className="flex items-center justify-between flex-wrap gap-2">
+        <span className={`text-[11px] px-2 py-0.5 rounded-full border font-medium ${confBadge.cls}`}>{confBadge.label}</span>
+        {confidence === 'low' && <p className="text-[10px] text-amber-400">Estimates may be less accurate — check portions</p>}
+      </div>
+
+      {/* Notes from Claude */}
+      {notes && <p className="text-[11px] text-gray-400 italic">{notes}</p>}
+
+      {/* Editable food rows */}
+      <div className="space-y-1.5 max-h-56 overflow-y-auto">
+        {items.map((f, i) => (
+          <div key={i} className={`flex items-start gap-2 p-2 rounded-xl border transition-opacity ${f._include ? 'border-gray-700 bg-gray-800' : 'border-gray-800 bg-gray-900 opacity-40'}`}>
+            <input type="checkbox" checked={f._include} onChange={e => upd(i, '_include', e.target.checked)} className="mt-1.5 flex-shrink-0" />
             <div className="flex-1 grid grid-cols-2 gap-1">
-              <input value={f.name} onChange={e=>updateItem(i,'name',e.target.value)} className="col-span-2 bg-gray-700 rounded px-2 py-1 text-xs text-white focus:outline-none"/>
-              <input type="number" value={f.calories} onChange={e=>updateItem(i,'calories',+e.target.value)} placeholder="Cal" className="bg-gray-700 rounded px-2 py-1 text-xs text-white focus:outline-none"/>
-              <input value={f.portion} onChange={e=>updateItem(i,'portion',e.target.value)} placeholder="Portion" className="bg-gray-700 rounded px-2 py-1 text-xs text-white focus:outline-none"/>
+              <input value={f.name} onChange={e => upd(i, 'name', e.target.value)}
+                className="col-span-2 bg-gray-700 rounded-lg px-2 py-1 text-xs text-white focus:outline-none focus:ring-1 focus:ring-indigo-500" />
+              <input type="number" value={f.calories} onChange={e => upd(i, 'calories', +e.target.value)}
+                placeholder="Cal" className="bg-gray-700 rounded-lg px-2 py-1 text-xs text-white focus:outline-none" />
+              <input value={f.portion} onChange={e => upd(i, 'portion', e.target.value)}
+                placeholder="Portion" className="bg-gray-700 rounded-lg px-2 py-1 text-xs text-white focus:outline-none" />
             </div>
           </div>
         ))}
       </div>
-      {recommendations && (
-        <div className="p-3 bg-indigo-500/10 border border-indigo-500/30 rounded-xl">
-          <p className="text-xs font-semibold text-indigo-300 mb-1">💡 Recommendations</p>
-          <p className="text-xs text-gray-300">{recommendations}</p>
-        </div>
-      )}
+
+      {/* Totals */}
+      <div className="flex items-center gap-4 px-2 py-2 bg-gray-800/60 rounded-xl text-xs text-gray-300">
+        <span className="font-bold text-white">{Math.round(totals.cal)} kcal</span>
+        <span>{totals.prot.toFixed(1)}g protein</span>
+        <span>{totals.carb.toFixed(1)}g carbs</span>
+        <span>{totals.fat.toFixed(1)}g fat</span>
+      </div>
+
       <div className="flex gap-2">
-        <Button onClick={confirm}>Log These Foods</Button>
+        <Button onClick={confirm} className="flex-1 justify-center">✅ Log This Meal</Button>
         <Button variant="secondary" onClick={onClose}>Cancel</Button>
       </div>
     </div>
@@ -190,25 +239,32 @@ export default function MealSection({ mealType, entries, recentFoods, onAdd, onR
     e.target.value = '';
     setPhotoLoading(true);
     try {
-      const base64 = await new Promise((res,rej) => {
+      const base64 = await new Promise((res, rej) => {
         const reader = new FileReader();
         reader.onload = ev => res(ev.target.result.split(',')[1]);
         reader.onerror = rej;
         reader.readAsDataURL(file);
       });
-      const { foods, recommendations } = await analyzeMealPhoto(base64, file.type);
-      if (!foods.length) { alert("Couldn't read this meal clearly — please enter manually"); setShowManual(true); }
-      else setPhotoModal({ foods, recommendations });
+      const result = await analyzeMealPhoto(base64, file.type);
+      if (!result?.foods?.length) {
+        alert("Couldn't identify foods in this photo — please enter manually");
+        setShowManual(true);
+      } else {
+        setPhotoModal(result);
+      }
     } catch (err) {
-      alert(import.meta.env.VITE_ANTHROPIC_API_KEY ? 'AI analysis failed — please enter manually' : 'Set VITE_ANTHROPIC_API_KEY to use photo analysis');
+      alert(import.meta.env.VITE_ANTHROPIC_API_KEY
+        ? 'AI analysis failed — please enter manually'
+        : 'Set VITE_ANTHROPIC_API_KEY to use photo analysis');
       setShowManual(true);
-    } finally { setPhotoLoading(false); }
+    } finally {
+      setPhotoLoading(false);
+    }
   }
 
-  function confirmPhotoEntries(entries, recs) {
+  function confirmPhotoEntries(entries) {
     entries.forEach(e => onAdd(e));
     setPhotoModal(null);
-    if (recs) localSet('nutrition_last_recommendation', recs);
   }
 
   const mealTotals = entries.reduce((acc,e)=>({cal:acc.cal+(e.calories||0),prot:acc.prot+(e.protein||0),carbs:acc.carbs+(e.carbs||0),fat:acc.fat+(e.fat||0)}),{cal:0,prot:0,carbs:0,fat:0});
@@ -216,19 +272,25 @@ export default function MealSection({ mealType, entries, recentFoods, onAdd, onR
   return (
     <>
       <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
-        <div className="flex items-center justify-between px-4 py-3 border-b border-gray-800">
-          <div className="flex items-center gap-2">
+        <div className="px-4 py-3 border-b border-gray-800 space-y-2">
+          <div className="flex items-center justify-between">
             <span className="text-sm font-semibold text-white">{mealType}</span>
             {entries.length > 0 && <span className="text-xs text-gray-500">{Math.round(mealTotals.cal)} kcal · {mealTotals.prot.toFixed(1)}g P</span>}
           </div>
-          <div className="flex items-center gap-2">
-            <button onClick={()=>photoRef.current?.click()} disabled={photoLoading}
-              className="flex items-center gap-1 text-xs text-gray-400 hover:text-white transition-colors disabled:opacity-40">
-              {photoLoading ? <Loader2 size={12} className="animate-spin"/> : <Camera size={12}/>}
-              {photoLoading ? 'Analyzing…' : 'Log with Photo'}
+          <div className="flex gap-2">
+            {/* PRIMARY: Photo button */}
+            <button onClick={() => photoRef.current?.click()} disabled={photoLoading}
+              className="flex-1 flex items-center justify-center gap-2 px-3 py-2.5 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-sm font-semibold rounded-xl transition-colors active:scale-[0.98]">
+              {photoLoading ? <Loader2 size={15} className="animate-spin" /> : <Camera size={15} />}
+              {photoLoading ? 'Analysing…' : '📸 Snap & Analyse'}
             </button>
-            <input ref={photoRef} type="file" accept="image/*" className="hidden" onChange={handlePhotoUpload}/>
+            {/* SECONDARY: Manual search */}
+            <button onClick={() => setShowManual(v => !v)}
+              className="flex items-center gap-1.5 px-3 py-2.5 bg-gray-800 hover:bg-gray-700 text-gray-300 text-sm font-medium rounded-xl transition-colors border border-gray-700">
+              <Search size={13} /> Search
+            </button>
           </div>
+          <input ref={photoRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={handlePhotoUpload} />
         </div>
 
         <div className="p-4 space-y-3">
@@ -322,8 +384,8 @@ export default function MealSection({ mealType, entries, recentFoods, onAdd, onR
         </div>
       </div>
 
-      <Modal open={!!photoModal} onClose={()=>setPhotoModal(null)} title="Confirm AI-Detected Foods" size="md">
-        {photoModal && <PhotoConfirmModal {...photoModal} mealType={mealType} onConfirm={confirmPhotoEntries} onClose={()=>setPhotoModal(null)}/>}
+      <Modal open={!!photoModal} onClose={()=>setPhotoModal(null)} title={`📸 ${photoModal?.meal_name || 'Detected Meal'}`} size="md">
+        {photoModal && <PhotoConfirmModal result={photoModal} mealType={mealType} onConfirm={confirmPhotoEntries} onClose={()=>setPhotoModal(null)}/>}
       </Modal>
     </>
   );

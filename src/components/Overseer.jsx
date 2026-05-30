@@ -209,12 +209,18 @@ ENERGY today: ${energyToday.length > 0
 
 ════ NUTRITION ════
 TODAY (${t}):
-  Calories: ${calToday} / ${calGoal || '?'} kcal
+  Calories: ${calToday} / ${calGoal || '?'} kcal (${calGoal > 0 ? Math.round(calToday/calGoal*100) : '?'}%)
   Protein: ${Math.round(proToday)}g / ${proGoal || '?'}g
   Carbs: ${Math.round(carbToday)}g | Fat: ${Math.round(fatToday)}g
+  Fiber: ${+nutToday.reduce((s,n)=>s+(n.fiber||0),0).toFixed(1)}g
+  Vitamin D: ${+nutToday.reduce((s,n)=>s+(n.vitaminD||0),0).toFixed(1)}mcg
+  Iron: ${+nutToday.reduce((s,n)=>s+(n.iron||0),0).toFixed(1)}mg
+  Calcium: ${+nutToday.reduce((s,n)=>s+(n.calcium||0),0).toFixed(0)}mg
+  Omega-3: ${+nutToday.reduce((s,n)=>s+(n.omega3||0),0).toFixed(2)}g
   Meals: ${nutToday.length > 0
-    ? nutToday.map(n => `${n.mealType}: ${n.foodName} ${n.calories || 0}cal`).join(', ')
+    ? nutToday.map(n => `${n.mealType}: ${n.foodName} ${n.calories || 0}cal${n.source==='photo_analysis'?' [photo]':''}`).join(', ')
     : 'nothing logged today'}
+  Photo meals today: ${nutToday.filter(n=>n.source==='photo_analysis').length}
 RECENT: ${recentNutDays.map(d => {
   const e = nutLogs.filter(n => n.date === d);
   const c = e.reduce((s, n) => s + (n.calories || 0), 0);
